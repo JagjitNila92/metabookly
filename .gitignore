@@ -1,0 +1,51 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+
+# Next.js
+apps/web/.next/
+apps/web/out/
+
+# CDK
+infra/cdk.out/
+infra/*.js
+infra/*.d.ts
+!infra/jest.config.js
+
+# Environment files - never commit these
+.env
+.env.local
+.env.*.local
+.env.production
+
+# AWS
+.aws-sam/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/settings.json
+.idea/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Coverage
+coverage/
+.nyc_output/
