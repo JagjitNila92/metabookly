@@ -1,0 +1,200 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+
+jobs:
+  # ─── Infrastructure ────────────────────────────────────────────────────────
+  infrastructure:
+    name: Deploy Infrastructure (CDK)
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: infra/package-lock.json
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Install CDK dependencies
+        working-directory: infra
+        run: npm ci
+
+      - name: Install AWS CDK
+        run: npm install -g aws-cdk
+
+      - name: CDK diff (show what will change)
+        working-directory: infra
+        run: cdk diff --all 2>&1 || true
+
+      - name: CDK deploy
+        working-directory: infra
+        run: cdk deploy --all --require-approval never --outputs-file ../cdk-outputs.json
+
+      - name: Upload CDK outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: cdk-outputs
+          path: cdk-outputs.json
+
+  # ─── API ───────────────────────────────────────────────────────────────────
+  api:
+    name: Test & Deploy API
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install API dependencies
+        working-directory: apps/api
+        run: |
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          else
+            echo "No requirements.txt yet — skipping"
+          fi
+
+      - name: Run API tests
+        working-directory: apps/api
+        run: |
+          if [ -f pytest.ini ] || [ -f pyproject.toml ] || [ -d tests ]; then
+            pytest
+          else
+            echo "No tests yet — skipping"
+          fi
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push API Docker image
+        working-directory: apps/api
+        run: |
+          if [ -f Dockerfile ]; then
+            ECR_REGISTRY=${{ steps.login-ecr.outputs.registry }}
+            IMAGE_URI=$ECR_REGISTRY/metabookly-api:${{ github.sha }}
+            docker build -t $IMAGE_URI .
+            docker push $IMAGE_URI
+            docker tag $IMAGE_URI $ECR_REGISTRY/metabookly-api:latest
+            docker push $ECR_REGISTRY/metabookly-api:latest
+            echo "image=$IMAGE_URI" >> $GITHUB_OUTPUT
+          else
+            echo "No Dockerfile yet — skipping build"
+          fi
+
+  # ─── Frontend ──────────────────────────────────────────────────────────────
+  web:
+    name: Test & Deploy Frontend
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install frontend dependencies
+        working-directory: apps/web
+        run: |
+          if [ -f package.json ]; then
+            npm ci
+          else
+            echo "No package.json yet — skipping"
+          fi
+
+      - name: Run frontend tests
+        working-directory: apps/web
+        run: |
+          if [ -f package.json ] && grep -q '"test"' package.json; then
+            npm test -- --passWithNoTests
+          else
+            echo "No tests yet — skipping"
+          fi
+
+      - name: Build frontend
+        working-directory: apps/web
+        run: |
+          if [ -f package.json ]; then
+            npm run build
+          else
+            echo "No package.json yet — skipping"
+          fi
+
+  # ─── PR checks (runs on pull requests only) ────────────────────────────────
+  pr-check:
+    name: PR Checks
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: infra/package-lock.json
+
+      - name: Install CDK dependencies
+        working-directory: infra
+        run: npm ci
+
+      - name: CDK synth (validate infrastructure compiles)
+        working-directory: infra
+        run: npx cdk synth --all --quiet
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Check API (lint/test if available)
+        working-directory: apps/api
+        run: |
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+            if [ -d tests ]; then pytest; fi
+          else
+            echo "No API code yet — skipping"
+          fi
