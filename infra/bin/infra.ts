@@ -4,6 +4,7 @@ import { NetworkStack } from '../lib/network-stack';
 import { StorageStack } from '../lib/storage-stack';
 import { DatabaseStack } from '../lib/database-stack';
 import { AuthStack } from '../lib/auth-stack';
+import { ApiStack } from '../lib/api-stack';
 
 const app = new cdk.App();
 
@@ -30,8 +31,18 @@ const databaseStack = new DatabaseStack(app, 'MetabooklyDatabase', {
 // 4. Auth — Cognito User Pool for retailers and publishers
 const authStack = new AuthStack(app, 'MetabooklyAuth', { env });
 
+// 5. API — ECR repository, ECS Fargate cluster + service, ALB
+const apiStack = new ApiStack(app, 'MetabooklyApi', {
+  env,
+  vpc: networkStack.vpc,
+  appSecurityGroup: networkStack.appSecurityGroup,
+  dbSecret: databaseStack.secret,
+});
+
 // Stack dependencies
 databaseStack.addDependency(networkStack);
+apiStack.addDependency(networkStack);
+apiStack.addDependency(databaseStack);
 
 cdk.Tags.of(app).add('Project', 'Metabookly');
 cdk.Tags.of(app).add('Environment', 'mvp');

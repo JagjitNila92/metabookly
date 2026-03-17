@@ -1,8 +1,6 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
-from app.auth.models import CurrentUser
 from app.db.session import get_db
 from app.schemas.catalog import SearchResponse
 from app.services.catalog_service import search_catalog
@@ -24,7 +22,6 @@ async def search(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
-    _: CurrentUser = Depends(get_current_user),
 ) -> SearchResponse:
     return await search_catalog(
         db=db,

@@ -1,5 +1,6 @@
 import uuid
 from datetime import date, datetime
+from decimal import Decimal
 from pydantic import BaseModel, ConfigDict
 
 
@@ -41,6 +42,10 @@ class BookSummary(BaseModel):
     publication_date: date | None = None
     cover_image_url: str | None = None
     out_of_print: bool
+    publishing_status: str | None = None
+    uk_rights: bool | None = None
+    rrp_gbp: Decimal | None = None
+    rrp_usd: Decimal | None = None
     publisher: PublisherOut | None = None
     contributors: list[ContributorOut] = []
 
@@ -56,6 +61,8 @@ class BookDetail(BookSummary):
     excerpt: str | None = None
     audience_code: str | None = None
     product_form_detail: str | None = None
+    height_mm: int | None = None
+    width_mm: int | None = None
     subjects: list[SubjectOut] = []
     created_at: datetime
     updated_at: datetime

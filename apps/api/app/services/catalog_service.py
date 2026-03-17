@@ -64,6 +64,9 @@ async def search_catalog(
     # Structured filters
     if product_form:
         stmt = stmt.where(Book.product_form == product_form)
+    else:
+        # Exclude digital formats (ebooks) from the default catalog view
+        stmt = stmt.where(Book.product_form.notin_(["DG", "DH"]))
     if language_code:
         stmt = stmt.where(Book.language_code == language_code)
     if in_print_only:
@@ -107,6 +110,10 @@ def _to_summary(book: Book) -> BookSummary:
         publication_date=book.publication_date,
         cover_image_url=book.cover_image_url,
         out_of_print=book.out_of_print,
+        publishing_status=book.publishing_status,
+        uk_rights=book.uk_rights,
+        rrp_gbp=str(book.rrp_gbp) if book.rrp_gbp is not None else None,
+        rrp_usd=str(book.rrp_usd) if book.rrp_usd is not None else None,
         publisher=PublisherOut.model_validate(book.publisher) if book.publisher else None,
         contributors=[ContributorOut.model_validate(c) for c in book.contributors],
     )

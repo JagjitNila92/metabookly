@@ -1,0 +1,565 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Metabookly sample ONIX 3.0 test fixture.
+  Exercises: UK rights, world rights, complex territories, RRP extraction,
+  HTML descriptions, multiple contributors, BIC/BISAC/Thema subjects,
+  out-of-print status, and delete notifications.
+-->
+<ONIXMessage release="3.0" xmlns="http://ns.editeur.org/onix/3.0/reference">
+  <Header>
+    <Sender>
+      <SenderName>Sample Publisher</SenderName>
+      <ContactName>Data Team</ContactName>
+      <EmailAddress>onix@samplepublisher.co.uk</EmailAddress>
+    </Sender>
+    <SentDateTime>20240315T120000</SentDateTime>
+    <MessageNote>Metabookly test fixture — do not ingest in production</MessageNote>
+  </Header>
+
+  <!-- ── Book 1: Paperback, UK-only rights, full metadata ───────────────── -->
+  <Product>
+    <RecordReference>SP-001</RecordReference>
+    <NotificationType>03</NotificationType>
+
+    <ProductIdentifier>
+      <ProductIDType>15</ProductIDType>
+      <IDValue>9781234567890</IDValue>
+    </ProductIdentifier>
+    <ProductIdentifier>
+      <ProductIDType>02</ProductIDType>
+      <IDValue>1234567890</IDValue>
+    </ProductIdentifier>
+
+    <DescriptiveDetail>
+      <ProductComposition>00</ProductComposition>
+      <ProductForm>BC</ProductForm>
+      <ProductFormDetail>B206</ProductFormDetail>
+
+      <TitleDetail>
+        <TitleType>01</TitleType>
+        <TitleElement>
+          <TitleElementLevel>01</TitleElementLevel>
+          <TitleText>The Midnight Algorithm</TitleText>
+          <Subtitle>A Novel of Code and Consequence</Subtitle>
+        </TitleElement>
+      </TitleDetail>
+
+      <Contributor>
+        <SequenceNumber>1</SequenceNumber>
+        <ContributorRole>A01</ContributorRole>
+        <PersonName>Eleanor Voss</PersonName>
+        <PersonNameInverted>Voss, Eleanor</PersonNameInverted>
+        <KeyNames>Voss</KeyNames>
+        <NamesBeforeKey>Eleanor</NamesBeforeKey>
+        <BiographicalNote>Eleanor Voss is an award-winning author of speculative fiction. Her debut novel won the Arthur C. Clarke Award.</BiographicalNote>
+      </Contributor>
+
+      <Contributor>
+        <SequenceNumber>2</SequenceNumber>
+        <ContributorRole>B06</ContributorRole>
+        <PersonName>Marcus Webb</PersonName>
+        <PersonNameInverted>Webb, Marcus</PersonNameInverted>
+        <KeyNames>Webb</KeyNames>
+        <NamesBeforeKey>Marcus</NamesBeforeKey>
+      </Contributor>
+
+      <EditionNumber>1</EditionNumber>
+      <Language>
+        <LanguageRole>01</LanguageRole>
+        <LanguageCode>eng</LanguageCode>
+      </Language>
+
+      <Extent>
+        <ExtentType>00</ExtentType>
+        <ExtentValue>352</ExtentValue>
+        <ExtentUnit>03</ExtentUnit>
+      </Extent>
+
+      <Subject>
+        <MainSubject/>
+        <SubjectSchemeIdentifier>12</SubjectSchemeIdentifier>
+        <SubjectCode>FF</SubjectCode>
+        <SubjectHeadingText>Fiction</SubjectHeadingText>
+      </Subject>
+      <Subject>
+        <SubjectSchemeIdentifier>10</SubjectSchemeIdentifier>
+        <SubjectCode>FIC028000</SubjectCode>
+        <SubjectHeadingText>FICTION / Science Fiction / General</SubjectHeadingText>
+      </Subject>
+      <Subject>
+        <SubjectSchemeIdentifier>93</SubjectSchemeIdentifier>
+        <SubjectCode>FYT</SubjectCode>
+        <SubjectHeadingText>Science fiction</SubjectHeadingText>
+      </Subject>
+
+      <Audience>
+        <AudienceCodeType>01</AudienceCodeType>
+        <AudienceCodeValue>01</AudienceCodeValue>
+      </Audience>
+    </DescriptiveDetail>
+
+    <CollateralDetail>
+      <TextContent>
+        <TextType>03</TextType>
+        <ContentAudience>00</ContentAudience>
+        <Text textformat="06">When data scientist Lena Park discovers a pattern buried deep in a city's traffic algorithm, she realises it is not optimising for efficiency — it is learning. A gripping techno-thriller about artificial intelligence, urban power, and what happens when systems start making decisions of their own.</Text>
+      </TextContent>
+      <TextContent>
+        <TextType>04</TextType>
+        <ContentAudience>00</ContentAudience>
+        <Text textformat="06">Part One: The Anomaly
+Part Two: The Source
+Part Three: The Decision
+Acknowledgements</Text>
+      </TextContent>
+      <SupportingResource>
+        <ResourceContentType>01</ResourceContentType>
+        <ContentAudience>00</ContentAudience>
+        <ResourceMode>03</ResourceMode>
+        <ResourceVersion>
+          <ResourceForm>02</ResourceForm>
+          <ResourceVersionFeature>
+            <ResourceVersionFeatureType>01</ResourceVersionFeatureType>
+            <FeatureValue>300</FeatureValue>
+          </ResourceVersionFeature>
+          <ResourceLink>https://covers.samplepublisher.co.uk/9781234567890_300.jpg</ResourceLink>
+        </ResourceVersion>
+        <ResourceVersion>
+          <ResourceForm>02</ResourceForm>
+          <ResourceVersionFeature>
+            <ResourceVersionFeatureType>01</ResourceVersionFeatureType>
+            <FeatureValue>600</FeatureValue>
+          </ResourceVersionFeature>
+          <ResourceLink>https://covers.samplepublisher.co.uk/9781234567890_600.jpg</ResourceLink>
+        </ResourceVersion>
+      </SupportingResource>
+    </CollateralDetail>
+
+    <PublishingDetail>
+      <Imprint>
+        <ImprintName>Meridian Press</ImprintName>
+      </Imprint>
+      <Publisher>
+        <PublishingRole>01</PublishingRole>
+        <PublisherName>Sample Publisher Ltd</PublisherName>
+      </Publisher>
+      <PublishingStatus>04</PublishingStatus>
+      <PublishingDate>
+        <PublishingDateRole>01</PublishingDateRole>
+        <Date>20240315</Date>
+      </PublishingDate>
+      <!-- UK-only rights -->
+      <SalesRights>
+        <SalesRightsType>01</SalesRightsType>
+        <Territory>
+          <CountriesIncluded>GB IE</CountriesIncluded>
+        </Territory>
+      </SalesRights>
+      <SalesRights>
+        <SalesRightsType>03</SalesRightsType>
+        <Territory>
+          <RegionsIncluded>WORLD</RegionsIncluded>
+          <CountriesExcluded>GB IE</CountriesExcluded>
+        </Territory>
+      </SalesRights>
+    </PublishingDetail>
+
+    <ProductSupply>
+      <SupplyDetail>
+        <Supplier>
+          <SupplierRole>03</SupplierRole>
+          <SupplierName>Gardners Books</SupplierName>
+        </Supplier>
+        <ProductAvailability>20</ProductAvailability>
+        <Price>
+          <PriceType>02</PriceType>
+          <PriceAmount>14.99</PriceAmount>
+          <CurrencyCode>GBP</CurrencyCode>
+          <Territory>
+            <CountriesIncluded>GB</CountriesIncluded>
+          </Territory>
+        </Price>
+      </SupplyDetail>
+    </ProductSupply>
+  </Product>
+
+  <!-- ── Book 2: Hardback, world rights, multiple contributors, HTML desc ── -->
+  <Product>
+    <RecordReference>SP-002</RecordReference>
+    <NotificationType>03</NotificationType>
+
+    <ProductIdentifier>
+      <ProductIDType>15</ProductIDType>
+      <IDValue>9780987654321</IDValue>
+    </ProductIdentifier>
+
+    <DescriptiveDetail>
+      <ProductComposition>00</ProductComposition>
+      <ProductForm>BB</ProductForm>
+
+      <TitleDetail>
+        <TitleType>01</TitleType>
+        <TitleElement>
+          <TitleElementLevel>01</TitleElementLevel>
+          <TitleText>The Bookseller's Map of the Known World</TitleText>
+        </TitleElement>
+      </TitleDetail>
+
+      <Contributor>
+        <SequenceNumber>1</SequenceNumber>
+        <ContributorRole>A01</ContributorRole>
+        <KeyNames>Okafor</KeyNames>
+        <NamesBeforeKey>Chidi</NamesBeforeKey>
+        <BiographicalNote><![CDATA[<p>Chidi Okafor is a historian and novelist based in Lagos and London. He is the author of three previous works of historical fiction, shortlisted for the Costa Novel Award.</p>]]></BiographicalNote>
+      </Contributor>
+      <Contributor>
+        <SequenceNumber>2</SequenceNumber>
+        <ContributorRole>A36</ContributorRole>
+        <PersonName>Sophie Laurent</PersonName>
+        <PersonNameInverted>Laurent, Sophie</PersonNameInverted>
+        <KeyNames>Laurent</KeyNames>
+        <NamesBeforeKey>Sophie</NamesBeforeKey>
+      </Contributor>
+
+      <EditionNumber>1</EditionNumber>
+      <Language>
+        <LanguageRole>01</LanguageRole>
+        <LanguageCode>eng</LanguageCode>
+      </Language>
+      <Language>
+        <LanguageRole>02</LanguageRole>
+        <LanguageCode>fre</LanguageCode>
+      </Language>
+
+      <Extent>
+        <ExtentType>00</ExtentType>
+        <ExtentValue>448</ExtentValue>
+        <ExtentUnit>03</ExtentUnit>
+      </Extent>
+
+      <Subject>
+        <MainSubject/>
+        <SubjectSchemeIdentifier>12</SubjectSchemeIdentifier>
+        <SubjectCode>FRH</SubjectCode>
+        <SubjectHeadingText>Historical fiction</SubjectHeadingText>
+      </Subject>
+      <Subject>
+        <SubjectSchemeIdentifier>10</SubjectSchemeIdentifier>
+        <SubjectCode>FIC014000</SubjectCode>
+        <SubjectHeadingText>FICTION / Historical / General</SubjectHeadingText>
+      </Subject>
+
+      <Audience>
+        <AudienceCodeType>01</AudienceCodeType>
+        <AudienceCodeValue>01</AudienceCodeValue>
+      </Audience>
+    </DescriptiveDetail>
+
+    <CollateralDetail>
+      <TextContent>
+        <TextType>03</TextType>
+        <ContentAudience>00</ContentAudience>
+        <!-- HTML description — parser should strip tags -->
+        <Text textformat="02"><![CDATA[<p>Fifteenth-century Timbuktu. The great library of Mali holds more than knowledge — it holds a secret that three empires would go to war to possess.</p><p>When apprentice bookseller Amara is tasked with cataloguing a newly arrived collection, she discovers a map sewn into the binding of an ancient Quran. What follows is a journey across the Sahara, through the courts of Lisbon and Istanbul, and into the heart of the Atlantic slave trade.</p><p><strong>Longlisted for the Booker Prize.</strong></p>]]></Text>
+      </TextContent>
+      <SupportingResource>
+        <ResourceContentType>01</ResourceContentType>
+        <ContentAudience>00</ContentAudience>
+        <ResourceMode>03</ResourceMode>
+        <ResourceVersion>
+          <ResourceForm>02</ResourceForm>
+          <ResourceVersionFeature>
+            <ResourceVersionFeatureType>01</ResourceVersionFeatureType>
+            <FeatureValue>800</FeatureValue>
+          </ResourceVersionFeature>
+          <ResourceLink>https://covers.samplepublisher.co.uk/9780987654321_800.jpg</ResourceLink>
+        </ResourceVersion>
+      </SupportingResource>
+    </CollateralDetail>
+
+    <PublishingDetail>
+      <Imprint>
+        <ImprintName>Atlas Books</ImprintName>
+      </Imprint>
+      <Publisher>
+        <PublishingRole>01</PublishingRole>
+        <PublisherName>Atlas Publishing Group</PublisherName>
+      </Publisher>
+      <PublishingStatus>04</PublishingStatus>
+      <PublishingDate>
+        <PublishingDateRole>01</PublishingDateRole>
+        <Date>20231010</Date>
+      </PublishingDate>
+      <!-- World rights -->
+      <SalesRights>
+        <SalesRightsType>01</SalesRightsType>
+        <Territory>
+          <RegionsIncluded>WORLD</RegionsIncluded>
+        </Territory>
+      </SalesRights>
+    </PublishingDetail>
+
+    <ProductSupply>
+      <SupplyDetail>
+        <Supplier>
+          <SupplierRole>03</SupplierRole>
+          <SupplierName>Gardners Books</SupplierName>
+        </Supplier>
+        <ProductAvailability>20</ProductAvailability>
+        <!-- GBP RRP (inc tax) -->
+        <Price>
+          <PriceType>02</PriceType>
+          <PriceAmount>22.99</PriceAmount>
+          <CurrencyCode>GBP</CurrencyCode>
+          <Territory>
+            <RegionsIncluded>WORLD</RegionsIncluded>
+          </Territory>
+        </Price>
+        <!-- USD RRP (inc tax) — US territory -->
+        <Price>
+          <PriceType>02</PriceType>
+          <PriceAmount>28.00</PriceAmount>
+          <CurrencyCode>USD</CurrencyCode>
+          <Territory>
+            <CountriesIncluded>US CA</CountriesIncluded>
+          </Territory>
+        </Price>
+      </SupplyDetail>
+    </ProductSupply>
+  </Product>
+
+  <!-- ── Book 3: E-book (DG), forthcoming, EUROPE rights ───────────────── -->
+  <Product>
+    <RecordReference>SP-003</RecordReference>
+    <NotificationType>03</NotificationType>
+
+    <ProductIdentifier>
+      <ProductIDType>15</ProductIDType>
+      <IDValue>9781111222333</IDValue>
+    </ProductIdentifier>
+
+    <DescriptiveDetail>
+      <ProductComposition>00</ProductComposition>
+      <ProductForm>DG</ProductForm>
+      <ProductFormDetail>E101</ProductFormDetail>
+
+      <TitleDetail>
+        <TitleType>01</TitleType>
+        <TitleElement>
+          <TitleElementLevel>01</TitleElementLevel>
+          <TitleText>Roots and Routes</TitleText>
+          <Subtitle>A Practical Guide to UK Plant-Based Cooking</Subtitle>
+        </TitleElement>
+      </TitleDetail>
+
+      <Contributor>
+        <SequenceNumber>1</SequenceNumber>
+        <ContributorRole>A01</ContributorRole>
+        <PersonName>Priya Mehta-Jones</PersonName>
+        <PersonNameInverted>Mehta-Jones, Priya</PersonNameInverted>
+        <KeyNames>Mehta-Jones</KeyNames>
+        <NamesBeforeKey>Priya</NamesBeforeKey>
+        <BiographicalNote>Priya Mehta-Jones is a chef and food writer. She runs the popular supper club "Roots" in Bristol.</BiographicalNote>
+      </Contributor>
+
+      <Language>
+        <LanguageRole>01</LanguageRole>
+        <LanguageCode>eng</LanguageCode>
+      </Language>
+
+      <Subject>
+        <MainSubject/>
+        <SubjectSchemeIdentifier>12</SubjectSchemeIdentifier>
+        <SubjectCode>WB</SubjectCode>
+        <SubjectHeadingText>Cookery / Food &amp; drink</SubjectHeadingText>
+      </Subject>
+      <Subject>
+        <SubjectSchemeIdentifier>10</SubjectSchemeIdentifier>
+        <SubjectCode>CKB050000</SubjectCode>
+        <SubjectHeadingText>COOKING / Vegetarian &amp; Vegan</SubjectHeadingText>
+      </Subject>
+
+      <Audience>
+        <AudienceCodeType>01</AudienceCodeType>
+        <AudienceCodeValue>01</AudienceCodeValue>
+      </Audience>
+    </DescriptiveDetail>
+
+    <CollateralDetail>
+      <TextContent>
+        <TextType>03</TextType>
+        <ContentAudience>00</ContentAudience>
+        <Text textformat="06">Over 120 seasonal recipes using vegetables, grains, and pulses sourced entirely from British and Irish farms. From hearty autumn stews to light spring salads, this guide celebrates what grows here and why it matters.</Text>
+      </TextContent>
+    </CollateralDetail>
+
+    <PublishingDetail>
+      <Imprint>
+        <ImprintName>Roots &amp; Routes</ImprintName>
+      </Imprint>
+      <Publisher>
+        <PublishingRole>01</PublishingRole>
+        <PublisherName>Canopy Press</PublisherName>
+      </Publisher>
+      <PublishingStatus>02</PublishingStatus>
+      <PublishingDate>
+        <PublishingDateRole>01</PublishingDateRole>
+        <Date>20240901</Date>
+      </PublishingDate>
+      <!-- Europe rights (includes GB) -->
+      <SalesRights>
+        <SalesRightsType>02</SalesRightsType>
+        <Territory>
+          <RegionsIncluded>EUROPE</RegionsIncluded>
+        </Territory>
+      </SalesRights>
+      <SalesRights>
+        <SalesRightsType>03</SalesRightsType>
+        <Territory>
+          <RegionsIncluded>WORLD</RegionsIncluded>
+          <RegionsExcluded>EUROPE</RegionsExcluded>
+        </Territory>
+      </SalesRights>
+    </PublishingDetail>
+
+    <ProductSupply>
+      <SupplyDetail>
+        <Supplier>
+          <SupplierRole>01</SupplierRole>
+          <SupplierName>Canopy Press</SupplierName>
+        </Supplier>
+        <ProductAvailability>10</ProductAvailability>
+        <Price>
+          <PriceType>02</PriceType>
+          <PriceAmount>9.99</PriceAmount>
+          <CurrencyCode>GBP</CurrencyCode>
+        </Price>
+      </SupplyDetail>
+    </ProductSupply>
+  </Product>
+
+  <!-- ── Book 4: Out of print (status 06), no rights specified ─────────── -->
+  <Product>
+    <RecordReference>SP-004</RecordReference>
+    <NotificationType>03</NotificationType>
+
+    <ProductIdentifier>
+      <ProductIDType>15</ProductIDType>
+      <IDValue>9789999000001</IDValue>
+    </ProductIdentifier>
+
+    <DescriptiveDetail>
+      <ProductComposition>00</ProductComposition>
+      <ProductForm>BC</ProductForm>
+
+      <TitleDetail>
+        <TitleType>01</TitleType>
+        <TitleElement>
+          <TitleElementLevel>01</TitleElementLevel>
+          <TitleText>The Long Afternoon</TitleText>
+        </TitleElement>
+      </TitleDetail>
+
+      <Contributor>
+        <SequenceNumber>1</SequenceNumber>
+        <ContributorRole>A01</ContributorRole>
+        <PersonName>James Blackwood</PersonName>
+        <PersonNameInverted>Blackwood, James</PersonNameInverted>
+      </Contributor>
+
+      <Language>
+        <LanguageRole>01</LanguageRole>
+        <LanguageCode>eng</LanguageCode>
+      </Language>
+
+      <Subject>
+        <MainSubject/>
+        <SubjectSchemeIdentifier>12</SubjectSchemeIdentifier>
+        <SubjectCode>FA</SubjectCode>
+        <SubjectHeadingText>Modern &amp; contemporary fiction</SubjectHeadingText>
+      </Subject>
+    </DescriptiveDetail>
+
+    <CollateralDetail>
+      <TextContent>
+        <TextType>02</TextType>
+        <ContentAudience>00</ContentAudience>
+        <Text textformat="06">A melancholy portrait of post-war England through the eyes of a retired schoolteacher.</Text>
+      </TextContent>
+    </CollateralDetail>
+
+    <PublishingDetail>
+      <Publisher>
+        <PublishingRole>01</PublishingRole>
+        <PublisherName>Meridian Press</PublisherName>
+      </Publisher>
+      <!-- Out of print -->
+      <PublishingStatus>06</PublishingStatus>
+      <PublishingDate>
+        <PublishingDateRole>01</PublishingDateRole>
+        <Date>196803</Date>
+      </PublishingDate>
+      <!-- No SalesRights specified — uk_rights will be None -->
+    </PublishingDetail>
+  </Product>
+
+  <!-- ── Book 5: Delete notification (NotificationType 05) ─────────────── -->
+  <Product>
+    <RecordReference>SP-005</RecordReference>
+    <NotificationType>05</NotificationType>
+
+    <ProductIdentifier>
+      <ProductIDType>15</ProductIDType>
+      <IDValue>9780000000001</IDValue>
+    </ProductIdentifier>
+
+    <DescriptiveDetail>
+      <ProductComposition>00</ProductComposition>
+      <ProductForm>BC</ProductForm>
+      <TitleDetail>
+        <TitleType>01</TitleType>
+        <TitleElement>
+          <TitleElementLevel>01</TitleElementLevel>
+          <TitleText>Withdrawn Title</TitleText>
+        </TitleElement>
+      </TitleDetail>
+    </DescriptiveDetail>
+
+    <PublishingDetail>
+      <Publisher>
+        <PublishingRole>01</PublishingRole>
+        <PublisherName>Sample Publisher Ltd</PublisherName>
+      </Publisher>
+      <PublishingStatus>11</PublishingStatus>
+    </PublishingDetail>
+  </Product>
+
+  <!-- ── Advance notice — should be skipped by parser ─────────────────── -->
+  <Product>
+    <RecordReference>SP-SKIP-001</RecordReference>
+    <NotificationType>01</NotificationType>
+    <ProductIdentifier>
+      <ProductIDType>15</ProductIDType>
+      <IDValue>9780000999999</IDValue>
+    </ProductIdentifier>
+    <DescriptiveDetail>
+      <ProductComposition>00</ProductComposition>
+      <ProductForm>BC</ProductForm>
+      <TitleDetail>
+        <TitleType>01</TitleType>
+        <TitleElement>
+          <TitleElementLevel>01</TitleElementLevel>
+          <TitleText>Advance Notice — Not Yet Confirmed</TitleText>
+        </TitleElement>
+      </TitleDetail>
+    </DescriptiveDetail>
+    <PublishingDetail>
+      <Publisher>
+        <PublishingRole>01</PublishingRole>
+        <PublisherName>Sample Publisher Ltd</PublisherName>
+      </Publisher>
+      <PublishingStatus>02</PublishingStatus>
+    </PublishingDetail>
+  </Product>
+
+</ONIXMessage>

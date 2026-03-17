@@ -3,8 +3,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import get_current_user
-from app.auth.models import CurrentUser
 from app.db.session import get_db
 from app.models.book import Book
 from app.schemas.book import BookDetail, ContributorOut, SubjectOut
@@ -16,8 +14,7 @@ router = APIRouter(prefix="/books", tags=["books"])
 async def get_book(
     isbn13: str,
     db: AsyncSession = Depends(get_db),
-    _: CurrentUser = Depends(get_current_user),
-) -> BookDetail:
+) ->BookDetail:
     stmt = (
         select(Book)
         .options(
@@ -37,8 +34,7 @@ async def get_book(
 async def get_contributors(
     isbn13: str,
     db: AsyncSession = Depends(get_db),
-    _: CurrentUser = Depends(get_current_user),
-) -> list[ContributorOut]:
+) ->list[ContributorOut]:
     stmt = (
         select(Book)
         .options(selectinload(Book.contributors))
@@ -54,8 +50,7 @@ async def get_contributors(
 async def get_subjects(
     isbn13: str,
     db: AsyncSession = Depends(get_db),
-    _: CurrentUser = Depends(get_current_user),
-) -> list[SubjectOut]:
+) ->list[SubjectOut]:
     stmt = (
         select(Book)
         .options(selectinload(Book.subjects))

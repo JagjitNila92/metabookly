@@ -1,6 +1,7 @@
 import uuid
 from datetime import date, datetime
-from sqlalchemy import Boolean, Date, ForeignKey, Index, SmallInteger, Text, func
+from decimal import Decimal
+from sqlalchemy import Boolean, Date, ForeignKey, Index, Numeric, SmallInteger, Text, func
 from sqlalchemy.dialects.postgresql import TSVECTOR, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
@@ -45,6 +46,17 @@ class Book(Base):
     out_of_print: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     onix_record_ref: Mapped[str | None] = mapped_column(Text)
     cover_image_url: Mapped[str | None] = mapped_column(Text)
+
+    # Fields added by migration 0002
+    publishing_status: Mapped[str | None] = mapped_column(Text)        # ONIX list 64: "04"=active, "02"=forthcoming, "06"=OOP
+    uk_rights: Mapped[bool | None] = mapped_column(Boolean)            # None = not stated
+    rrp_gbp: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))    # publisher list price GBP (reference only)
+    rrp_usd: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))    # publisher list price USD (reference only)
+
+    # Fields added by migration 0004
+    height_mm: Mapped[int | None] = mapped_column(SmallInteger)        # physical height in mm (ONIX MeasureType 01)
+    width_mm: Mapped[int | None] = mapped_column(SmallInteger)         # physical width in mm (ONIX MeasureType 02)
+
     created_at: Mapped[datetime] = mapped_column(default=func.now())
     updated_at: Mapped[datetime] = mapped_column(default=func.now(), onupdate=func.now())
 
