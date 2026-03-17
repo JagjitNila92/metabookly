@@ -45,7 +45,7 @@ export class AuthStack extends cdk.Stack {
       userPoolClientName: 'metabookly-web',
       authFlows: {
         userSrp: true,
-        userPassword: false,  // SRP is more secure than plain password flow
+        userPassword: true,  // Enabled for server-side NextAuth CredentialsProvider flow
       },
       oAuth: {
         flows: {

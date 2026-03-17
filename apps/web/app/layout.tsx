@@ -2,6 +2,8 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import Link from 'next/link'
 import { BookOpen } from 'lucide-react'
+import { Providers } from '@/components/Providers'
+import { AuthButton } from '@/components/AuthButton'
 import './globals.css'
 
 const inter = Inter({ subsets: ['latin'] })
@@ -15,6 +17,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={inter.className}>
       <body>
+        <Providers>
         {/* Nav */}
         <header className="sticky top-0 z-50 bg-white border-b border-slate-200 shadow-sm">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center h-14 gap-6">
@@ -28,9 +31,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               </Link>
             </nav>
             <div className="ml-auto flex items-center gap-3">
-              <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">
+              <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium hidden sm:block">
                 MVP Demo
               </span>
+              <AuthButton />
             </div>
           </div>
         </header>
@@ -43,6 +47,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <span>Book data sourced from ONIX 3.0 feeds</span>
           </div>
         </footer>
+        </Providers>
       </body>
     </html>
   )

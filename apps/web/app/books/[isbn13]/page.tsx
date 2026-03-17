@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { ChevronLeft, Calendar, Hash, BookOpen, Globe, Tag, Ruler } from 'lucide-react'
 import { getBook } from '@/lib/api'
 import { BookCover } from '@/components/BookCover'
+import { PricingPanel } from '@/components/PricingPanel'
 import {
   PRODUCT_FORM,
   PUBLISHING_STATUS,
@@ -89,6 +90,9 @@ export default async function BookDetailPage({ params }: Props) {
               </p>
             </div>
           )}
+
+          {/* Trade pricing panel — auth-gated, client-side */}
+          <PricingPanel isbn13={book.isbn13} rrpGbp={book.rrp_gbp} />
 
           {/* UK rights */}
           {book.uk_rights !== null && (
