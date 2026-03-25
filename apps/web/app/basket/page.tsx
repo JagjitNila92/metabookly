@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useTransition } from 'react'
+import { useEffect, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -219,7 +219,7 @@ export default function BasketPage() {
   const [showSubmit, setShowSubmit] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [confirmedOrder, setConfirmedOrder] = useState<Order | null>(null)
-  const [, startTransition] = useTransition()
+
 
   useEffect(() => {
     Promise.all([getBasket(), getAddresses()])

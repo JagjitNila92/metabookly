@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Loader2, CheckCircle2, XCircle, Clock, ChevronDown } from 'lucide-react'
+import { Loader2, CheckCircle2, XCircle, Clock } from 'lucide-react'
 
 type Request = {
   id: string

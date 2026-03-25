@@ -16,7 +16,7 @@ export function AddToBasket({ isbn13 }: AddToBasketProps) {
   const [added, setAdded] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const groups: string[] = (session as any)?.groups ?? []
+  const groups: string[] = (session as { groups?: string[] } | null)?.groups ?? []
   const isRetailer = groups.includes('retailers') || groups.includes('admins')
 
   if (status === 'loading') return null
@@ -29,8 +29,8 @@ export function AddToBasket({ isbn13 }: AddToBasketProps) {
       await addToBasket(isbn13, 1)
       setAdded(true)
       window.dispatchEvent(new Event('basketUpdated'))
-    } catch (e: any) {
-      setError(e.message ?? 'Failed to add to basket')
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to add to basket')
     } finally {
       setLoading(false)
     }

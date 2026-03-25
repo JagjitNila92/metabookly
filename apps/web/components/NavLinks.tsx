@@ -2,23 +2,27 @@
 
 import Link from 'next/link'
 import { useSession } from 'next-auth/react'
-import { useEffect, useState } from 'react'
-import { ShoppingCart } from 'lucide-react'
+import { useEffect, useState, useCallback } from 'react'
+import { usePathname } from 'next/navigation'
+import { ShoppingCart, ArrowLeftRight } from 'lucide-react'
 import { getBasket } from '@/lib/api'
+
+// ── Basket badge ──────────────────────────────────────────────────────────────
 
 function BasketBadge() {
   const [count, setCount] = useState<number | null>(null)
 
+  const refresh = useCallback(() => {
+    getBasket()
+      .then(b => setCount(b.items.length))
+      .catch(() => setCount(null))
+  }, [])
+
   useEffect(() => {
-    function refresh() {
-      getBasket()
-        .then(b => setCount(b.items.length))
-        .catch(() => setCount(null))
-    }
     refresh()
     window.addEventListener('basketUpdated', refresh)
     return () => window.removeEventListener('basketUpdated', refresh)
-  }, [])
+  }, [refresh])
 
   return (
     <Link href="/basket" className="relative inline-flex items-center gap-1 hover:text-amber-600 transition-colors">
@@ -33,53 +37,111 @@ function BasketBadge() {
   )
 }
 
+// ── Nav link helper ───────────────────────────────────────────────────────────
+
+function NavLink({ href, children }: { href: string; children: React.ReactNode }) {
+  const path = usePathname()
+  const active = path === href || (href !== '/' && path.startsWith(href))
+  return (
+    <Link
+      href={href}
+      className={`transition-colors ${active ? 'text-amber-600 font-medium' : 'hover:text-amber-600'}`}
+    >
+      {children}
+    </Link>
+  )
+}
+
+// ── Admin switcher ────────────────────────────────────────────────────────────
+
+type PortalView = 'retailer' | 'publisher'
+
+function AdminSwitcher({ view, onChange }: { view: PortalView; onChange: (v: PortalView) => void }) {
+  return (
+    <div className="flex items-center gap-1 bg-slate-100 rounded-full px-1 py-0.5 text-xs">
+      <ArrowLeftRight size={11} className="text-slate-400 mx-1" />
+      <button
+        onClick={() => onChange('retailer')}
+        className={`px-2.5 py-0.5 rounded-full transition-colors ${
+          view === 'retailer' ? 'bg-white shadow-sm text-slate-800 font-medium' : 'text-slate-500 hover:text-slate-700'
+        }`}
+      >
+        Retailer
+      </button>
+      <button
+        onClick={() => onChange('publisher')}
+        className={`px-2.5 py-0.5 rounded-full transition-colors ${
+          view === 'publisher' ? 'bg-white shadow-sm text-slate-800 font-medium' : 'text-slate-500 hover:text-slate-700'
+        }`}
+      >
+        Publisher
+      </button>
+    </div>
+  )
+}
+
+// ── Main nav ──────────────────────────────────────────────────────────────────
+
 export function NavLinks() {
   const { data: session } = useSession()
+  const pathname = usePathname()
 
-  const groups: string[] = (session as any)?.groups ?? []
-  const isAdmin = groups.includes('admins')
-  const isRetailer = groups.includes('retailers') || isAdmin
+  const groups: string[] = (session as { groups?: string[] } | null)?.groups ?? []
+  const isAdmin     = groups.includes('admins')
+  const isRetailer  = groups.includes('retailers') || isAdmin
   const isPublisher = groups.includes('publishers') || isAdmin
+
+  // Admin starts on whichever portal their current path suggests
+  const inferView = (): PortalView => {
+    if (pathname.startsWith('/publisher') || pathname.startsWith('/portal')) return 'publisher'
+    return 'retailer'
+  }
+  const [adminView, setAdminView] = useState<PortalView>(inferView)
+
+  // When admin switches view, navigate to the right dashboard
+  const handleSwitch = (v: PortalView) => {
+    setAdminView(v)
+    window.location.href = v === 'retailer' ? '/dashboard' : '/publisher/dashboard'
+  }
+
+  // Determine which nav to show
+  const showRetailerNav = isRetailer && (!isAdmin || adminView === 'retailer')
+  const showPublisherNav = isPublisher && (!isAdmin || adminView === 'publisher')
 
   return (
     <nav className="flex items-center gap-4 text-sm text-slate-600">
-      <Link href="/catalog" className="hover:text-amber-600 transition-colors">
-        Catalog
-      </Link>
+      {/* Catalog is always visible */}
+      <NavLink href="/catalog">Catalogue</NavLink>
 
-      {isPublisher && (
-        <Link href="/portal" className="hover:text-amber-600 transition-colors">
-          Supplier Portal
-        </Link>
-      )}
-
-      {isRetailer && (
+      {/* Retailer nav */}
+      {showRetailerNav && (
         <>
-          <Link href="/orders" className="hover:text-amber-600 transition-colors">
-            Orders
-          </Link>
+          <NavLink href="/dashboard">Dashboard</NavLink>
+          <NavLink href="/orders">Orders</NavLink>
           <BasketBadge />
-          <Link href="/settings" className="hover:text-amber-600 transition-colors">
-            Settings
-          </Link>
-          <Link href="/account" className="hover:text-amber-600 transition-colors">
-            My Account
-          </Link>
-          <Link href="/retailer/dashboard" className="hover:text-amber-600 transition-colors">
-            My Activity
-          </Link>
+          <NavLink href="/settings">Settings</NavLink>
+          <NavLink href="/account">My Account</NavLink>
         </>
       )}
 
-      {isAdmin && (
+      {/* Publisher nav */}
+      {showPublisherNav && (
         <>
-          <Link href="/distributor/dashboard" className="hover:text-amber-600 transition-colors">
-            Distributor
-          </Link>
-          <Link href="/distributor/requests" className="hover:text-amber-600 transition-colors">
-            Requests
-          </Link>
+          <NavLink href="/publisher/dashboard">Dashboard</NavLink>
+          <NavLink href="/portal/feeds">Feed History</NavLink>
+          <NavLink href="/portal/conflicts">Conflicts</NavLink>
+          <NavLink href="/portal/suggestions">AI Review</NavLink>
         </>
+      )}
+
+      {/* Admin-only distributor tools */}
+      {isAdmin && adminView === 'retailer' && (
+        <NavLink href="/distributor/requests">Requests</NavLink>
+      )}
+
+      {/* Admin switcher */}
+      {isAdmin && (
+        <AdminSwitcher view={adminView} onChange={handleSwitch} />
       )}
     </nav>
   )

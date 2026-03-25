@@ -9,7 +9,7 @@ import { Suspense } from 'react'
 function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const callbackUrl = searchParams.get('callbackUrl') ?? '/catalog'
+  const callbackUrl = searchParams.get('callbackUrl') ?? '/auth/redirect'
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -45,9 +45,10 @@ function LoginForm() {
         </div>
 
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-8">
-          <h1 className="text-lg font-semibold text-slate-900 mb-1">Retailer sign in</h1>
+          <h1 className="text-lg font-semibold text-slate-900 mb-1">Sign in to Metabookly</h1>
           <p className="text-sm text-slate-500 mb-6">
-            Sign in to see live trade prices from your distributor accounts.
+            Retailer? See live trade prices from your distributor accounts.<br />
+            Publisher? View your title performance and manage ONIX feeds.
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -92,7 +93,7 @@ function LoginForm() {
         </div>
 
         <p className="text-center text-xs text-slate-400 mt-4">
-          Retailer accounts are set up by Metabookly admin.
+          Accounts are set up by Metabookly admin.
         </p>
       </div>
     </div>

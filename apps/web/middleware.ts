@@ -10,8 +10,9 @@ export default withAuth(
     const isRetailer = groups.includes('retailers') || isAdmin
     const isPublisher = groups.includes('publishers') || isAdmin
 
-    // Retailer-only routes
+    // Retailer dashboard + retailer-only routes
     if (
+      pathname.startsWith('/dashboard') ||
       pathname.startsWith('/account') ||
       pathname.startsWith('/retailer/') ||
       pathname.startsWith('/basket') ||
@@ -19,21 +20,21 @@ export default withAuth(
       pathname.startsWith('/settings')
     ) {
       if (!isRetailer) {
-        return NextResponse.redirect(new URL('/', req.url))
+        return NextResponse.redirect(new URL('/login', req.url))
       }
     }
 
-    // Publisher/distributor portal routes
-    if (pathname.startsWith('/portal')) {
+    // Publisher portal routes
+    if (pathname.startsWith('/publisher') || pathname.startsWith('/portal')) {
       if (!isPublisher) {
-        return NextResponse.redirect(new URL('/', req.url))
+        return NextResponse.redirect(new URL('/login', req.url))
       }
     }
 
     // Distributor/admin-only routes
     if (pathname.startsWith('/distributor/')) {
       if (!isAdmin) {
-        return NextResponse.redirect(new URL('/', req.url))
+        return NextResponse.redirect(new URL('/login', req.url))
       }
     }
 
@@ -50,6 +51,8 @@ export default withAuth(
 
 export const config = {
   matcher: [
+    '/dashboard/:path*',
+    '/dashboard',
     '/account/:path*',
     '/retailer/:path*',
     '/basket/:path*',
@@ -58,7 +61,9 @@ export const config = {
     '/orders',
     '/settings/:path*',
     '/settings',
+    '/publisher/:path*',
     '/portal/:path*',
     '/distributor/:path*',
+    '/auth/redirect',
   ],
 }

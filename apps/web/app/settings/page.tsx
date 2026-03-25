@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Settings, User, MapPin, Bell, Plus, Pencil, Trash2, Check, AlertCircle, X } from 'lucide-react'
 import {
@@ -21,8 +21,14 @@ const TABS = [
 
 // ─── Address form ─────────────────────────────────────────────────────────────
 
-const EMPTY_ADDR = {
-  address_type: 'delivery' as const,
+type AddrFormData = {
+  address_type: 'billing' | 'delivery'
+  label: string; contact_name: string; line1: string; line2: string | null
+  city: string; county: string | null; postcode: string; country_code: string; is_default: boolean
+}
+
+const EMPTY_ADDR: AddrFormData = {
+  address_type: 'delivery',
   label: '', contact_name: '', line1: '', line2: '',
   city: '', county: '', postcode: '', country_code: 'GB', is_default: false,
 }
@@ -32,8 +38,8 @@ function AddressForm({
   onSave,
   onCancel,
 }: {
-  initial?: Partial<typeof EMPTY_ADDR & { id: string }>
-  onSave: (data: typeof EMPTY_ADDR) => Promise<void>
+  initial?: Partial<AddrFormData & { id: string }>
+  onSave: (data: AddrFormData) => Promise<void>
   onCancel: () => void
 }) {
   const [form, setForm] = useState({ ...EMPTY_ADDR, ...initial })
@@ -416,7 +422,7 @@ function NotificationsTab() {
 
 // ─── Main settings page ───────────────────────────────────────────────────────
 
-export default function SettingsPage() {
+function SettingsContent() {
   const searchParams = useSearchParams()
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') ?? 'profile')
 
@@ -454,5 +460,13 @@ export default function SettingsPage() {
       {activeTab === 'addresses'     && <AddressesTab />}
       {activeTab === 'notifications' && <NotificationsTab />}
     </div>
+  )
+}
+
+export default function SettingsPage() {
+  return (
+    <Suspense>
+      <SettingsContent />
+    </Suspense>
   )
 }
