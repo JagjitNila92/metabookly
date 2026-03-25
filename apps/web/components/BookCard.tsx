@@ -5,9 +5,10 @@ import type { BookSummary } from '@/lib/types'
 
 interface BookCardProps {
   book: BookSummary
+  isAuthenticated?: boolean
 }
 
-export function BookCard({ book }: BookCardProps) {
+export function BookCard({ book, isAuthenticated = false }: BookCardProps) {
   const author = primaryAuthor(book.contributors)
   const form = PRODUCT_FORM[book.product_form] ?? book.product_form
   const rrp = formatRRP(book.rrp_gbp)
@@ -49,7 +50,13 @@ export function BookCard({ book }: BookCardProps) {
         )}
         <div className="flex items-center justify-between mt-auto pt-2">
           {rrp ? (
-            <span className="text-sm font-semibold text-slate-800">{rrp}</span>
+            <span
+              className="text-sm font-semibold text-slate-800"
+              style={!isAuthenticated ? { filter: 'blur(4px)', opacity: 0.6, userSelect: 'none' } : undefined}
+              aria-hidden={!isAuthenticated}
+            >
+              {rrp}
+            </span>
           ) : (
             <span />
           )}

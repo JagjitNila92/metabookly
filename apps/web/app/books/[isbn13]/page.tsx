@@ -2,6 +2,8 @@ import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ChevronLeft, Calendar, Hash, BookOpen, Globe, Tag, Ruler } from 'lucide-react'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
 import { getBook } from '@/lib/api'
 import { BookCover } from '@/components/BookCover'
 import { PricingPanel } from '@/components/PricingPanel'
@@ -35,6 +37,9 @@ const SCHEME_LABELS: Record<string, string> = {
 }
 
 export default async function BookDetailPage({ params }: Props) {
+  const session = await getServerSession(authOptions)
+  const isAuthenticated = !!session
+
   let book
   try {
     book = await getBook(params.isbn13)
@@ -76,7 +81,11 @@ export default async function BookDetailPage({ params }: Props) {
 
           {/* RRP pricing card */}
           {(rrpGbp || rrpUsd) && (
-            <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3">
+            <div
+              className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3"
+              style={!isAuthenticated ? { filter: 'blur(4px)', opacity: 0.6, userSelect: 'none', pointerEvents: 'none' } : undefined}
+              aria-hidden={!isAuthenticated}
+            >
               <p className="text-xs font-semibold text-amber-700 mb-1 uppercase tracking-wide">
                 Publisher RRP
               </p>

@@ -1,8 +1,10 @@
 'use client'
 
-import { useSession, signIn } from 'next-auth/react'
+import { useSession } from 'next-auth/react'
 import { useEffect, useState } from 'react'
-import { Package, Clock, AlertCircle, LogIn, TrendingDown } from 'lucide-react'
+import { Package, Clock, AlertCircle, TrendingDown } from 'lucide-react'
+import { useViewCount } from '@/hooks/useViewCount'
+import { SoftWallPanel } from './SoftWallPanel'
 
 interface DistributorPrice {
   distributor_code: string
@@ -22,6 +24,7 @@ interface PricingPanelProps {
 
 export function PricingPanel({ isbn13, rrpGbp }: PricingPanelProps) {
   const { data: session, status } = useSession()
+  const { overThreshold } = useViewCount()
   const [distributors, setDistributors] = useState<DistributorPrice[] | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -42,21 +45,27 @@ export function PricingPanel({ isbn13, rrpGbp }: PricingPanelProps) {
 
   if (status === 'loading') return null
 
+  // Anonymous user — show soft wall after threshold, blurred placeholder before
   if (!session) {
+    if (overThreshold) return <SoftWallPanel />
+
     return (
-      <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
-        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+      <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4 select-none">
+        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">
           Trade Pricing
         </p>
-        <p className="text-sm text-slate-500 mb-3">
-          Sign in to see your live trade price and stock availability from your distributor accounts.
-        </p>
-        <button
-          onClick={() => signIn()}
-          className="inline-flex items-center gap-1.5 text-sm font-medium text-amber-700 bg-amber-100 hover:bg-amber-200 px-3 py-1.5 rounded transition-colors"
-        >
-          <LogIn size={14} /> Sign in to view pricing
-        </button>
+        <div style={{ filter: 'blur(5px)', opacity: 0.55 }} aria-hidden>
+          <div className="mb-3 bg-white rounded-lg border border-slate-100 p-3">
+            <p className="text-[11px] text-slate-400 uppercase tracking-wide mb-2">Gardners</p>
+            <p className="text-2xl font-bold text-slate-900">£8.99</p>
+            <p className="text-xs text-slate-400 mt-1">42% off RRP · 24 in stock · 2d delivery</p>
+          </div>
+          <div className="bg-white rounded-lg border border-slate-100 p-3">
+            <p className="text-[11px] text-slate-400 uppercase tracking-wide mb-2">Bertrams</p>
+            <p className="text-2xl font-bold text-slate-900">£9.49</p>
+            <p className="text-xs text-slate-400 mt-1">38% off RRP · 11 in stock · 3d delivery</p>
+          </div>
+        </div>
       </div>
     )
   }

@@ -110,7 +110,7 @@ export default async function CatalogPage({ searchParams }: PageProps) {
             <>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 mb-6">
                 {data.results.map((book) => (
-                  <BookCard key={book.id} book={book} />
+                  <BookCard key={book.id} book={book} isAuthenticated={!!session} />
                 ))}
               </div>
               <Suspense>
