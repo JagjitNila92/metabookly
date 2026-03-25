@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
           phone: body.phone,
           country: body.country_code,
           jobtitle: body.role,
-          // referral_source stored in our DB; HubSpot custom property needed for this field
+          how_did_you_hear_about_us: body.referral_source ?? '',
         },
       }),
     }).catch((e) => console.warn('HubSpot contact creation failed:', e))
