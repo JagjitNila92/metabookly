@@ -1,6 +1,17 @@
 from datetime import datetime
 from uuid import UUID
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
+
+
+class RegisterRequest(BaseModel):
+    email: EmailStr
+    password: str
+    company_name: str
+    contact_name: str
+    phone: str
+    role: str
+    country_code: str
+    referral_source: str
 
 
 class DistributorOption(BaseModel):
@@ -27,6 +38,10 @@ class RetailerProfileOut(BaseModel):
     email: str
     country_code: str
     san: str | None
+    contact_name: str | None = None
+    phone: str | None = None
+    role: str | None = None
+    referral_source: str | None = None
     accounts: list[LinkedAccountOut]
 
     model_config = {"from_attributes": True}

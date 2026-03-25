@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
+import { Suspense } from 'react'
 import {
   ShoppingBag, ShoppingCart, Package, TrendingUp, AlertCircle,
-  Loader2, ArrowRight, CheckCircle, Clock, XCircle, Building2,
+  Loader2, ArrowRight, CheckCircle, Clock, XCircle, Building2, PartyPopper,
 } from 'lucide-react'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -82,7 +84,9 @@ function StatCard({
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-export default function RetailerDashboard() {
+function RetailerDashboard() {
+  const searchParams = useSearchParams()
+  const isNewRegistration = searchParams.get('welcome') === '1'
   const [profile, setProfile] = useState<RetailerProfile | null>(null)
   const [orders, setOrders] = useState<OrderSummary[]>([])
   const [basket, setBasket] = useState<BasketData | null>(null)
@@ -147,6 +151,20 @@ export default function RetailerDashboard() {
           Here&apos;s your trading summary for today.
         </p>
       </div>
+
+      {/* New registration welcome banner */}
+      {isNewRegistration && (
+        <div className="mb-6 bg-green-50 border border-green-200 rounded-xl p-4 flex items-start gap-3">
+          <PartyPopper size={16} className="text-green-600 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-green-800">Welcome to Metabookly!</p>
+            <p className="text-xs text-green-700 mt-0.5">
+              Your account is live. Next step: link your Gardners or Bertrams trade account to see live pricing.{' '}
+              <Link href="/account" className="underline">Link an account →</Link>
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Pending account alert */}
       {pendingAccounts.length > 0 && (
@@ -286,5 +304,13 @@ export default function RetailerDashboard() {
         ))}
       </div>
     </div>
+  )
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense>
+      <RetailerDashboard />
+    </Suspense>
   )
 }

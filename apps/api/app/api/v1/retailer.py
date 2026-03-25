@@ -23,14 +23,15 @@ from app.auth.models import CurrentUser
 from app.config import get_settings
 from app.connectors.registry import get_connector, list_connectors
 from app.models.retailer import Retailer, RetailerDistributor
-from app.services.email_service import notify_distributor_new_request
 from app.schemas.retailer import (
     DistributorOption,
     LinkAccountRequest,
     LinkedAccountOut,
+    RegisterRequest,
     RetailerProfileOut,
     UpdateProfileRequest,
 )
+from app.services.email_service import notify_distributor_new_request, send_welcome_email
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/retailer", tags=["retailer"])
@@ -119,6 +120,96 @@ async def _email_distributor_new_request(
 
 
 # ─── Endpoints ────────────────────────────────────────────────────────────────
+
+@router.post("/register", status_code=201)
+async def register_retailer(
+    body: RegisterRequest,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """
+    Public endpoint — no auth required.
+    Creates a Cognito user, adds them to the retailers group, creates
+    the Retailer DB row, and sends a welcome email.
+    """
+    settings = get_settings()
+    cognito = boto3.client("cognito-idp", region_name=settings.aws_region)
+
+    # 1. Check email not already registered in our DB
+    existing = await db.execute(
+        select(Retailer).where(Retailer.email == body.email)
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="An account with this email already exists.")
+
+    # 2. Create Cognito user
+    try:
+        resp = cognito.admin_create_user(
+            UserPoolId=settings.cognito_user_pool_id,
+            Username=body.email,
+            UserAttributes=[
+                {"Name": "email", "Value": body.email},
+                {"Name": "email_verified", "Value": "true"},
+                {"Name": "name", "Value": body.contact_name},
+            ],
+            MessageAction="SUPPRESS",  # we send our own welcome email
+        )
+        cognito_sub = next(
+            a["Value"] for a in resp["User"]["Attributes"] if a["Name"] == "sub"
+        )
+    except ClientError as e:
+        code = e.response["Error"]["Code"]
+        if code == "UsernameExistsException":
+            raise HTTPException(status_code=409, detail="An account with this email already exists.")
+        logger.error("Cognito admin_create_user failed: %s", e)
+        raise HTTPException(status_code=500, detail="Could not create account. Please try again.")
+
+    # 3. Set permanent password (skips FORCE_CHANGE_PASSWORD state)
+    try:
+        cognito.admin_set_user_password(
+            UserPoolId=settings.cognito_user_pool_id,
+            Username=body.email,
+            Password=body.password,
+            Permanent=True,
+        )
+    except ClientError as e:
+        # Clean up the user we just created
+        cognito.admin_delete_user(UserPoolId=settings.cognito_user_pool_id, Username=body.email)
+        code = e.response["Error"]["Code"]
+        if code == "InvalidPasswordException":
+            raise HTTPException(status_code=422, detail="Password does not meet the requirements.")
+        raise HTTPException(status_code=500, detail="Could not set password. Please try again.")
+
+    # 4. Add to retailers group
+    cognito.admin_add_user_to_group(
+        UserPoolId=settings.cognito_user_pool_id,
+        Username=body.email,
+        GroupName="retailers",
+    )
+
+    # 5. Create retailer profile in DB
+    retailer = Retailer(
+        cognito_sub=cognito_sub,
+        email=body.email,
+        company_name=body.company_name,
+        contact_name=body.contact_name,
+        phone=body.phone,
+        role=body.role,
+        country_code=body.country_code,
+        referral_source=body.referral_source,
+    )
+    db.add(retailer)
+    await db.commit()
+
+    # 6. Send welcome email in background
+    background_tasks.add_task(
+        send_welcome_email,
+        retailer_email=body.email,
+        contact_name=body.contact_name,
+        company_name=body.company_name,
+    )
+
+    return {"success": True, "sub": cognito_sub}
 
 @router.get("/me", response_model=RetailerProfileOut)
 async def get_me(

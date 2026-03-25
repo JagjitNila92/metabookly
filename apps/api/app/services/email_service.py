@@ -196,6 +196,56 @@ async def notify_retailer_request_approved(
     )
 
 
+async def send_welcome_email(
+    *,
+    retailer_email: str,
+    contact_name: str,
+    company_name: str,
+) -> None:
+    """Sent to a new retailer immediately after self-service registration."""
+    first_name = contact_name.split()[0] if contact_name else "there"
+
+    body = f"""
+    <h2 style="margin:0 0 8px;color:#0f172a;font-size:22px;">Welcome to Metabookly, {first_name}!</h2>
+    <p style="margin:0 0 24px;color:#64748b;font-size:15px;">
+      Your retailer account for <strong>{company_name}</strong> has been created.
+      You can now sign in and start browsing live trade pricing from Gardners, Bertrams and more.
+    </p>
+
+    <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:20px;margin-bottom:24px;">
+      <p style="margin:0 0 12px;font-size:13px;font-weight:600;color:#92400e;text-transform:uppercase;letter-spacing:0.05em;">Your account details</p>
+      <table cellpadding="0" cellspacing="0" style="width:100%;">
+        {_field_row("Email", retailer_email)}
+        {_field_row("Company", company_name)}
+      </table>
+    </div>
+
+    <p style="margin:0 0 16px;color:#475569;font-size:14px;">
+      <strong>Next steps:</strong>
+    </p>
+    <ol style="margin:0 0 24px;padding-left:20px;color:#475569;font-size:14px;line-height:1.8;">
+      <li>Sign in at <a href="https://metabookly.com/login" style="color:#f59e0b;">metabookly.com/login</a></li>
+      <li>Link your Gardners or Bertrams trade account in <strong>Settings → Distributor Accounts</strong></li>
+      <li>Browse the catalogue and see live trade prices instantly</li>
+    </ol>
+
+    <a href="https://metabookly.com/login"
+       style="display:inline-block;background:#f59e0b;color:#ffffff;text-decoration:none;
+              padding:12px 24px;border-radius:8px;font-size:15px;font-weight:600;">
+      Sign in to Metabookly
+    </a>
+
+    <p style="margin:24px 0 0;color:#94a3b8;font-size:13px;">
+      Questions? Reply to this email or visit our help centre.
+    </p>"""
+
+    await _send(
+        to_address=retailer_email,
+        subject=f"Welcome to Metabookly, {company_name}!",
+        html_body=_wrap_html("Welcome to Metabookly", body),
+    )
+
+
 async def notify_retailer_request_rejected(
     *,
     retailer_email: str,
