@@ -48,7 +48,11 @@ dev = [
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
+# Override TEST_DATABASE_URL to point at a separate test DB:
+#   TEST_DATABASE_URL=postgresql+asyncpg://metabookly:metabookly@localhost:5432/metabookly_test pytest
+# CI sets this automatically via the workflow env vars.
 
 [tool.ruff]
 line-length = 100

@@ -1,0 +1,180 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Metabookly sample ONIX 2.1 test fixture.
+  Exercises: OtherText description, NumberOfPages, MediaFile cover,
+  BASICMainSubject, RightsTerritory (flat text), PriceTypeCode, delete notification.
+-->
+<ONIXMessage release="2.1">
+  <Header>
+    <FromCompany>Sample Publisher 2.1</FromCompany>
+    <SentDate>20240315</SentDate>
+  </Header>
+
+  <!-- ── Book 1: Paperback, UK rights, full metadata ──────────────────────── -->
+  <Product>
+    <RecordReference>SP21-001</RecordReference>
+    <NotificationType>03</NotificationType>
+
+    <ProductIdentifier>
+      <ProductIDType>15</ProductIDType>
+      <IDValue>9781234500021</IDValue>
+    </ProductIdentifier>
+    <ProductIdentifier>
+      <ProductIDType>02</ProductIDType>
+      <IDValue>1234500021</IDValue>
+    </ProductIdentifier>
+
+    <ProductForm>BC</ProductForm>
+
+    <Title>
+      <TitleType>01</TitleType>
+      <TitleText>The Fens in Winter</TitleText>
+      <Subtitle>A Norfolk Mystery</Subtitle>
+    </Title>
+
+    <Contributor>
+      <SequenceNumber>1</SequenceNumber>
+      <ContributorRole>A01</ContributorRole>
+      <PersonName>Dorothy Marsh</PersonName>
+      <PersonNameInverted>Marsh, Dorothy</PersonNameInverted>
+      <BiographicalNote>Dorothy Marsh is a crime writer based in Norfolk.</BiographicalNote>
+    </Contributor>
+
+    <Language>
+      <LanguageRole>01</LanguageRole>
+      <LanguageCode>eng</LanguageCode>
+    </Language>
+
+    <NumberOfPages>288</NumberOfPages>
+
+    <!-- BIC main subject via 2.1-specific element -->
+    <BASICMainSubject>FF</BASICMainSubject>
+
+    <Subject>
+      <SubjectSchemeIdentifier>10</SubjectSchemeIdentifier>
+      <SubjectCode>FIC022000</SubjectCode>
+      <SubjectHeadingText>FICTION / Mystery &amp; Detective / General</SubjectHeadingText>
+    </Subject>
+
+    <!-- Description via OtherText (2.1 style) — TextTypeCode 01 = main description -->
+    <OtherText>
+      <TextTypeCode>01</TextTypeCode>
+      <TextFormat>06</TextFormat>
+      <Text>A cold December morning in the Norfolk fens brings Inspector Rhys Cole to the edge of a frozen dyke where a man's body has been found. As the investigation deepens, Cole discovers the dead man had been keeping secrets that reach back thirty years to a vanished village.</Text>
+    </OtherText>
+
+    <!-- Table of contents via OtherText TextTypeCode 04 -->
+    <OtherText>
+      <TextTypeCode>04</TextTypeCode>
+      <TextFormat>06</TextFormat>
+      <Text>Part One: The Dyke
+Part Two: The Village
+Part Three: The Secret</Text>
+    </OtherText>
+
+    <!-- Cover image via MediaFile (2.1 style) -->
+    <MediaFile>
+      <MediaFileTypeCode>04</MediaFileTypeCode>
+      <MediaFileLinkTypeCode>01</MediaFileLinkTypeCode>
+      <MediaFileLink>https://covers.samplepublisher.co.uk/9781234500021.jpg</MediaFileLink>
+    </MediaFile>
+
+    <Imprint>
+      <ImprintName>Meridian Crime</ImprintName>
+    </Imprint>
+    <Publisher>
+      <PublishingRole>01</PublishingRole>
+      <PublisherName>Sample Publisher 2.1 Ltd</PublisherName>
+    </Publisher>
+    <PublishingStatus>04</PublishingStatus>
+    <PublicationDate>20240301</PublicationDate>
+
+    <!-- UK rights via flat RightsTerritory text (2.1 style) -->
+    <SalesRights>
+      <SalesRightsType>01</SalesRightsType>
+      <RightsTerritory>GB IE</RightsTerritory>
+    </SalesRights>
+    <SalesRights>
+      <SalesRightsType>03</SalesRightsType>
+      <RightsTerritory>WORLD</RightsTerritory>
+    </SalesRights>
+
+    <SupplyDetail>
+      <SupplierName>Gardners Books</SupplierName>
+      <AvailabilityCode>IP</AvailabilityCode>
+      <Price>
+        <PriceTypeCode>02</PriceTypeCode>
+        <PriceAmount>12.99</PriceAmount>
+        <CurrencyCode>GBP</CurrencyCode>
+      </Price>
+    </SupplyDetail>
+  </Product>
+
+  <!-- ── Book 2: Short description via TextTypeCode 02 fallback ───────────── -->
+  <Product>
+    <RecordReference>SP21-002</RecordReference>
+    <NotificationType>03</NotificationType>
+
+    <ProductIdentifier>
+      <ProductIDType>15</ProductIDType>
+      <IDValue>9781234500022</IDValue>
+    </ProductIdentifier>
+
+    <ProductForm>BC</ProductForm>
+
+    <Title>
+      <TitleType>01</TitleType>
+      <TitleText>Brief Annotation Test</TitleText>
+    </Title>
+
+    <Contributor>
+      <SequenceNumber>1</SequenceNumber>
+      <ContributorRole>A01</ContributorRole>
+      <PersonName>Test Author</PersonName>
+    </Contributor>
+
+    <Language>
+      <LanguageRole>01</LanguageRole>
+      <LanguageCode>eng</LanguageCode>
+    </Language>
+
+    <NumberOfPages>120</NumberOfPages>
+
+    <!-- Only short annotation — should fall back to description -->
+    <OtherText>
+      <TextTypeCode>02</TextTypeCode>
+      <TextFormat>06</TextFormat>
+      <Text>A short annotation used as description fallback when no main description is present.</Text>
+    </OtherText>
+
+    <Publisher>
+      <PublishingRole>01</PublishingRole>
+      <PublisherName>Test Publisher 2.1</PublisherName>
+    </Publisher>
+    <PublishingStatus>04</PublishingStatus>
+    <PublicationDate>20240601</PublicationDate>
+  </Product>
+
+  <!-- ── Delete notification ────────────────────────────────────────────── -->
+  <Product>
+    <RecordReference>SP21-DEL</RecordReference>
+    <NotificationType>05</NotificationType>
+
+    <ProductIdentifier>
+      <ProductIDType>15</ProductIDType>
+      <IDValue>9781234500099</IDValue>
+    </ProductIdentifier>
+
+    <ProductForm>BC</ProductForm>
+    <Title>
+      <TitleType>01</TitleType>
+      <TitleText>Deleted 2.1 Title</TitleText>
+    </Title>
+    <Publisher>
+      <PublishingRole>01</PublishingRole>
+      <PublisherName>Test Publisher 2.1</PublisherName>
+    </Publisher>
+    <PublishingStatus>11</PublishingStatus>
+  </Product>
+
+</ONIXMessage>

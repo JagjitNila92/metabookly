@@ -14,6 +14,10 @@ class MockDistributorConnector(AbstractDistributorConnector):
     """
 
     @property
+    def requires_credentials(self) -> bool:
+        return False
+
+    @property
     def distributor_code(self) -> str:
         return "MOCK"
 

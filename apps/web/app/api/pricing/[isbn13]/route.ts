@@ -9,12 +9,12 @@ export async function GET(
   { params }: { params: { isbn13: string } },
 ) {
   const session = await getServerSession(authOptions)
-  if (!session?.idToken) {
+  if (!session?.accessToken) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   const res = await fetch(`${API}/api/v1/books/${params.isbn13}/availability`, {
-    headers: { Authorization: `Bearer ${session.idToken}` },
+    headers: { Authorization: `Bearer ${session.accessToken}` },
     cache: 'no-store',
   })
 

@@ -1,0 +1,528 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Metabookly Portal Upload Test Feed
+  Use this file to test the Supplier Portal upload feature.
+
+  What this file exercises:
+    Product 1 (PT-001) — Paperback with full metadata: dimensions, HTML description,
+                          multiple contributors, BIC + BISAC + Thema subjects, UK rights,
+                          GBP RRP, physical dimensions.
+    Product 2 (PT-002) — Hardback with world rights, HTML bio via CDATA, excerpt,
+                          USD + GBP pricing, Measure elements.
+    Product 3 (PT-003) — Forthcoming paperback with short description only (thin
+                          metadata — good candidate for AI enhancement when Bedrock
+                          is wired up).
+    Product 4 (PT-004) — Delete notification (NotificationType 05). ISBN does not
+                          exist in the database so the UPDATE affects 0 rows — this
+                          is fine and expected.
+    Product 5 (PT-SKIP)— Advance notice (NotificationType 01) — skipped by parser.
+
+  Expected ingest result (portal feed history):
+    Records found:    5
+    Records upserted: 3   (PT-001, PT-002, PT-003)
+    Records failed:   0
+    Records skipped:  0
+    Conflicts:        0   (first ingest — no editorial layer yet)
+    Note: PT-004 delete counts as upserted=1 (soft-delete),
+          PT-SKIP is skipped before counting.
+-->
+<ONIXMessage release="3.0" xmlns="http://ns.editeur.org/onix/3.0/reference">
+  <Header>
+    <Sender>
+      <SenderName>Portal Test Publisher</SenderName>
+      <ContactName>Test Team</ContactName>
+      <EmailAddress>test@portaltestpublisher.co.uk</EmailAddress>
+    </Sender>
+    <SentDateTime>20260317T100000</SentDateTime>
+    <MessageNote>Portal upload test feed — safe to ingest in development</MessageNote>
+  </Header>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       PRODUCT 1 — Full metadata paperback, UK + Ireland rights
+       ══════════════════════════════════════════════════════════════════════ -->
+  <Product>
+    <RecordReference>PT-001</RecordReference>
+    <NotificationType>03</NotificationType>
+
+    <ProductIdentifier>
+      <ProductIDType>15</ProductIDType>
+      <IDValue>9783161484100</IDValue>
+    </ProductIdentifier>
+    <ProductIdentifier>
+      <ProductIDType>02</ProductIDType>
+      <IDValue>3161484100</IDValue>
+    </ProductIdentifier>
+
+    <DescriptiveDetail>
+      <ProductComposition>00</ProductComposition>
+      <ProductForm>BC</ProductForm>
+      <ProductFormDetail>B106</ProductFormDetail>
+
+      <TitleDetail>
+        <TitleType>01</TitleType>
+        <TitleElement>
+          <TitleElementLevel>01</TitleElementLevel>
+          <TitleText>The Carbon Inheritance</TitleText>
+          <Subtitle>Family, Land, and the Coming Climate</Subtitle>
+        </TitleElement>
+      </TitleDetail>
+
+      <Contributor>
+        <SequenceNumber>1</SequenceNumber>
+        <ContributorRole>A01</ContributorRole>
+        <PersonName>Aoife Brennan-Walsh</PersonName>
+        <PersonNameInverted>Brennan-Walsh, Aoife</PersonNameInverted>
+        <KeyNames>Brennan-Walsh</KeyNames>
+        <NamesBeforeKey>Aoife</NamesBeforeKey>
+        <BiographicalNote>Aoife Brennan-Walsh is an environmental journalist and essayist based in Cork. She has written for The Guardian, the Irish Times, and Granta. Her first book was shortlisted for the Wainwright Prize for Writing on Conservation.</BiographicalNote>
+      </Contributor>
+      <Contributor>
+        <SequenceNumber>2</SequenceNumber>
+        <ContributorRole>A34</ContributorRole>
+        <PersonName>Dr Sunita Patel</PersonName>
+        <PersonNameInverted>Patel, Sunita</PersonNameInverted>
+        <KeyNames>Patel</KeyNames>
+        <NamesBeforeKey>Sunita</NamesBeforeKey>
+      </Contributor>
+
+      <EditionNumber>1</EditionNumber>
+      <EditionStatement>First edition</EditionStatement>
+
+      <Language>
+        <LanguageRole>01</LanguageRole>
+        <LanguageCode>eng</LanguageCode>
+      </Language>
+
+      <Extent>
+        <ExtentType>00</ExtentType>
+        <ExtentValue>320</ExtentValue>
+        <ExtentUnit>03</ExtentUnit>
+      </Extent>
+
+      <!-- Physical dimensions -->
+      <Measure>
+        <MeasureType>01</MeasureType>
+        <Measurement>198</Measurement>
+        <MeasureUnit>03</MeasureUnit>
+      </Measure>
+      <Measure>
+        <MeasureType>02</MeasureType>
+        <Measurement>129</Measurement>
+        <MeasureUnit>03</MeasureUnit>
+      </Measure>
+
+      <Subject>
+        <MainSubject/>
+        <SubjectSchemeIdentifier>12</SubjectSchemeIdentifier>
+        <SubjectCode>RNPG</SubjectCode>
+        <SubjectHeadingText>Climate change</SubjectHeadingText>
+      </Subject>
+      <Subject>
+        <SubjectSchemeIdentifier>10</SubjectSchemeIdentifier>
+        <SubjectCode>NAT011000</SubjectCode>
+        <SubjectHeadingText>NATURE / Environmental Conservation &amp; Protection</SubjectHeadingText>
+      </Subject>
+      <Subject>
+        <SubjectSchemeIdentifier>93</SubjectSchemeIdentifier>
+        <SubjectCode>RNPG</SubjectCode>
+        <SubjectHeadingText>Climate change</SubjectHeadingText>
+      </Subject>
+      <Subject>
+        <SubjectSchemeIdentifier>93</SubjectSchemeIdentifier>
+        <SubjectCode>DNF</SubjectCode>
+        <SubjectHeadingText>Nature writing</SubjectHeadingText>
+      </Subject>
+
+      <Audience>
+        <AudienceCodeType>01</AudienceCodeType>
+        <AudienceCodeValue>01</AudienceCodeValue>
+      </Audience>
+    </DescriptiveDetail>
+
+    <CollateralDetail>
+      <TextContent>
+        <TextType>03</TextType>
+        <ContentAudience>00</ContentAudience>
+        <Text textformat="02"><![CDATA[<p>When Aoife Brennan-Walsh inherited her family's West Cork farm, she also inherited four generations of decisions about land, soil, and cattle. <em>The Carbon Inheritance</em> is the story of what she did next — and what it cost her.</p><p>Part memoir, part investigation, this book traces the invisible carbon ledger running through one Irish family and asks the question every farming family in Britain and Ireland is quietly avoiding: what do we owe the land we will one day hand on?</p><p><strong>'Urgent, honest, and beautifully observed'</strong> — Robert Macfarlane</p>]]></Text>
+      </TextContent>
+      <TextContent>
+        <TextType>04</TextType>
+        <ContentAudience>00</ContentAudience>
+        <Text textformat="06">Prologue: The Field in November
+Part One: What We Were Given
+Part Two: What We Are Doing
+Part Three: What We Might Leave
+Epilogue: The Field in March
+Notes and Sources
+Acknowledgements</Text>
+      </TextContent>
+      <!-- Real Open Library cover — will load in the UI -->
+      <SupportingResource>
+        <ResourceContentType>01</ResourceContentType>
+        <ContentAudience>00</ContentAudience>
+        <ResourceMode>03</ResourceMode>
+        <ResourceVersion>
+          <ResourceForm>02</ResourceForm>
+          <ResourceVersionFeature>
+            <ResourceVersionFeatureType>01</ResourceVersionFeatureType>
+            <FeatureValue>400</FeatureValue>
+          </ResourceVersionFeature>
+          <ResourceLink>https://covers.openlibrary.org/b/isbn/9783161484100-M.jpg</ResourceLink>
+        </ResourceVersion>
+      </SupportingResource>
+    </CollateralDetail>
+
+    <PublishingDetail>
+      <Imprint>
+        <ImprintName>Field Notes</ImprintName>
+      </Imprint>
+      <Publisher>
+        <PublishingRole>01</PublishingRole>
+        <PublisherName>Portal Test Publisher</PublisherName>
+      </Publisher>
+      <PublishingStatus>04</PublishingStatus>
+      <PublishingDate>
+        <PublishingDateRole>01</PublishingDateRole>
+        <Date>20260401</Date>
+      </PublishingDate>
+      <SalesRights>
+        <SalesRightsType>01</SalesRightsType>
+        <Territory>
+          <CountriesIncluded>GB IE</CountriesIncluded>
+        </Territory>
+      </SalesRights>
+      <SalesRights>
+        <SalesRightsType>03</SalesRightsType>
+        <Territory>
+          <RegionsIncluded>WORLD</RegionsIncluded>
+          <CountriesExcluded>GB IE</CountriesExcluded>
+        </Territory>
+      </SalesRights>
+    </PublishingDetail>
+
+    <ProductSupply>
+      <SupplyDetail>
+        <Supplier>
+          <SupplierRole>03</SupplierRole>
+          <SupplierName>Portal Test Publisher</SupplierName>
+        </Supplier>
+        <ProductAvailability>20</ProductAvailability>
+        <Price>
+          <PriceType>02</PriceType>
+          <PriceAmount>16.99</PriceAmount>
+          <CurrencyCode>GBP</CurrencyCode>
+          <Territory>
+            <CountriesIncluded>GB</CountriesIncluded>
+          </Territory>
+        </Price>
+      </SupplyDetail>
+    </ProductSupply>
+  </Product>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       PRODUCT 2 — Hardback, world rights, USD + GBP pricing, with excerpt
+       ══════════════════════════════════════════════════════════════════════ -->
+  <Product>
+    <RecordReference>PT-002</RecordReference>
+    <NotificationType>03</NotificationType>
+
+    <ProductIdentifier>
+      <ProductIDType>15</ProductIDType>
+      <IDValue>9780262046305</IDValue>
+    </ProductIdentifier>
+
+    <DescriptiveDetail>
+      <ProductComposition>00</ProductComposition>
+      <ProductForm>BB</ProductForm>
+
+      <TitleDetail>
+        <TitleType>01</TitleType>
+        <TitleElement>
+          <TitleElementLevel>01</TitleElementLevel>
+          <TitleText>Invisible Infrastructure</TitleText>
+          <Subtitle>The Hidden Systems That Run Modern Cities</Subtitle>
+        </TitleElement>
+      </TitleDetail>
+
+      <Contributor>
+        <SequenceNumber>1</SequenceNumber>
+        <ContributorRole>A01</ContributorRole>
+        <KeyNames>Osei-Bonsu</KeyNames>
+        <NamesBeforeKey>Kwame</NamesBeforeKey>
+        <BiographicalNote><![CDATA[<p>Kwame Osei-Bonsu is Professor of Urban Systems at UCL and a former adviser to the Greater London Authority. He has consulted on infrastructure projects in seventeen countries.</p>]]></BiographicalNote>
+      </Contributor>
+
+      <EditionNumber>1</EditionNumber>
+
+      <Language>
+        <LanguageRole>01</LanguageRole>
+        <LanguageCode>eng</LanguageCode>
+      </Language>
+
+      <Extent>
+        <ExtentType>00</ExtentType>
+        <ExtentValue>416</ExtentValue>
+        <ExtentUnit>03</ExtentUnit>
+      </Extent>
+
+      <Measure>
+        <MeasureType>01</MeasureType>
+        <Measurement>23.4</Measurement>
+        <MeasureUnit>01</MeasureUnit>
+      </Measure>
+      <Measure>
+        <MeasureType>02</MeasureType>
+        <Measurement>15.3</Measurement>
+        <MeasureUnit>01</MeasureUnit>
+      </Measure>
+
+      <Subject>
+        <MainSubject/>
+        <SubjectSchemeIdentifier>12</SubjectSchemeIdentifier>
+        <SubjectCode>RPC</SubjectCode>
+        <SubjectHeadingText>Urban &amp; municipal engineering</SubjectHeadingText>
+      </Subject>
+      <Subject>
+        <SubjectSchemeIdentifier>10</SubjectSchemeIdentifier>
+        <SubjectCode>POL058000</SubjectCode>
+        <SubjectHeadingText>POLITICAL SCIENCE / Public Policy / City Planning &amp; Urban Development</SubjectHeadingText>
+      </Subject>
+      <Subject>
+        <SubjectSchemeIdentifier>93</SubjectSchemeIdentifier>
+        <SubjectCode>JBSP</SubjectCode>
+        <SubjectHeadingText>Urban communities</SubjectHeadingText>
+      </Subject>
+
+      <Audience>
+        <AudienceCodeType>01</AudienceCodeType>
+        <AudienceCodeValue>01</AudienceCodeValue>
+      </Audience>
+    </DescriptiveDetail>
+
+    <CollateralDetail>
+      <TextContent>
+        <TextType>03</TextType>
+        <ContentAudience>00</ContentAudience>
+        <Text textformat="02"><![CDATA[<p>Under every city lies a second city. Water mains and sewer tunnels, cable ducts and data exchanges, the ancient buried rivers and the brand-new fibre — all of it invisible to the people walking above it, yet all of it indispensable to modern life.</p><p>In <em>Invisible Infrastructure</em>, Kwame Osei-Bonsu takes us beneath six world cities — London, Lagos, Tokyo, New York, Mumbai and Rotterdam — to reveal the extraordinary systems that keep them alive. Richly illustrated and compellingly argued, this is a book about engineering, politics, inequality, and what cities owe their citizens.</p>]]></Text>
+      </TextContent>
+      <TextContent>
+        <TextType>23</TextType>
+        <ContentAudience>00</ContentAudience>
+        <Text textformat="06">Chapter One: What Lies Beneath London
+
+The Thames Tideway Tunnel is nine years late and three billion pounds over budget. On the morning I descend into the excavation at Chambers Wharf, the project manager tells me this is normal. "Every major infrastructure project in history has been late and over budget," she says. "The ones that ran on time and on budget are the ones that weren't ambitious enough." I write this in my notebook and wonder if she is right.</Text>
+      </TextContent>
+    </CollateralDetail>
+
+    <PublishingDetail>
+      <Imprint>
+        <ImprintName>MIT Press</ImprintName>
+      </Imprint>
+      <Publisher>
+        <PublishingRole>01</PublishingRole>
+        <PublisherName>Portal Test Publisher</PublisherName>
+      </Publisher>
+      <PublishingStatus>04</PublishingStatus>
+      <PublishingDate>
+        <PublishingDateRole>01</PublishingDateRole>
+        <Date>20260315</Date>
+      </PublishingDate>
+      <SalesRights>
+        <SalesRightsType>01</SalesRightsType>
+        <Territory>
+          <RegionsIncluded>WORLD</RegionsIncluded>
+        </Territory>
+      </SalesRights>
+    </PublishingDetail>
+
+    <ProductSupply>
+      <SupplyDetail>
+        <Supplier>
+          <SupplierRole>03</SupplierRole>
+          <SupplierName>Portal Test Publisher</SupplierName>
+        </Supplier>
+        <ProductAvailability>20</ProductAvailability>
+        <Price>
+          <PriceType>02</PriceType>
+          <PriceAmount>25.00</PriceAmount>
+          <CurrencyCode>GBP</CurrencyCode>
+          <Territory>
+            <RegionsIncluded>WORLD</RegionsIncluded>
+          </Territory>
+        </Price>
+        <Price>
+          <PriceType>02</PriceType>
+          <PriceAmount>32.00</PriceAmount>
+          <CurrencyCode>USD</CurrencyCode>
+          <Territory>
+            <CountriesIncluded>US CA</CountriesIncluded>
+          </Territory>
+        </Price>
+      </SupplyDetail>
+    </ProductSupply>
+  </Product>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       PRODUCT 3 — Forthcoming, thin metadata (no description, no excerpt)
+                   Good test for AI enhancement trigger
+       ══════════════════════════════════════════════════════════════════════ -->
+  <Product>
+    <RecordReference>PT-003</RecordReference>
+    <NotificationType>03</NotificationType>
+
+    <ProductIdentifier>
+      <ProductIDType>15</ProductIDType>
+      <IDValue>9781529923957</IDValue>
+    </ProductIdentifier>
+
+    <DescriptiveDetail>
+      <ProductComposition>00</ProductComposition>
+      <ProductForm>BC</ProductForm>
+
+      <TitleDetail>
+        <TitleType>01</TitleType>
+        <TitleElement>
+          <TitleElementLevel>01</TitleElementLevel>
+          <TitleText>Still Water</TitleText>
+        </TitleElement>
+      </TitleDetail>
+
+      <Contributor>
+        <SequenceNumber>1</SequenceNumber>
+        <ContributorRole>A01</ContributorRole>
+        <PersonName>Demi Adeyemi</PersonName>
+        <PersonNameInverted>Adeyemi, Demi</PersonNameInverted>
+        <KeyNames>Adeyemi</KeyNames>
+        <NamesBeforeKey>Demi</NamesBeforeKey>
+      </Contributor>
+
+      <Language>
+        <LanguageRole>01</LanguageRole>
+        <LanguageCode>eng</LanguageCode>
+      </Language>
+
+      <Extent>
+        <ExtentType>00</ExtentType>
+        <ExtentValue>256</ExtentValue>
+        <ExtentUnit>03</ExtentUnit>
+      </Extent>
+
+      <Subject>
+        <MainSubject/>
+        <SubjectSchemeIdentifier>12</SubjectSchemeIdentifier>
+        <SubjectCode>FA</SubjectCode>
+        <SubjectHeadingText>Modern &amp; contemporary fiction</SubjectHeadingText>
+      </Subject>
+
+      <Audience>
+        <AudienceCodeType>01</AudienceCodeType>
+        <AudienceCodeValue>01</AudienceCodeValue>
+      </Audience>
+    </DescriptiveDetail>
+
+    <!-- No CollateralDetail / description — intentionally thin metadata -->
+
+    <PublishingDetail>
+      <Publisher>
+        <PublishingRole>01</PublishingRole>
+        <PublisherName>Portal Test Publisher</PublisherName>
+      </Publisher>
+      <PublishingStatus>02</PublishingStatus>
+      <PublishingDate>
+        <PublishingDateRole>01</PublishingDateRole>
+        <Date>20260901</Date>
+      </PublishingDate>
+      <SalesRights>
+        <SalesRightsType>01</SalesRightsType>
+        <Territory>
+          <RegionsIncluded>WORLD</RegionsIncluded>
+        </Territory>
+      </SalesRights>
+    </PublishingDetail>
+
+    <ProductSupply>
+      <SupplyDetail>
+        <Supplier>
+          <SupplierRole>01</SupplierRole>
+          <SupplierName>Portal Test Publisher</SupplierName>
+        </Supplier>
+        <ProductAvailability>10</ProductAvailability>
+        <Price>
+          <PriceType>02</PriceType>
+          <PriceAmount>14.99</PriceAmount>
+          <CurrencyCode>GBP</CurrencyCode>
+        </Price>
+      </SupplyDetail>
+    </ProductSupply>
+  </Product>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       PRODUCT 4 — Delete notification (NotificationType 05)
+                   ISBN does not exist → UPDATE affects 0 rows, which is fine.
+                   Counted as upserted=1 in the portal feed summary.
+       ══════════════════════════════════════════════════════════════════════ -->
+  <Product>
+    <RecordReference>PT-004</RecordReference>
+    <NotificationType>05</NotificationType>
+
+    <ProductIdentifier>
+      <ProductIDType>15</ProductIDType>
+      <IDValue>9780000000099</IDValue>
+    </ProductIdentifier>
+
+    <DescriptiveDetail>
+      <ProductComposition>00</ProductComposition>
+      <ProductForm>BC</ProductForm>
+      <TitleDetail>
+        <TitleType>01</TitleType>
+        <TitleElement>
+          <TitleElementLevel>01</TitleElementLevel>
+          <TitleText>Deleted Title — Should Set out_of_print</TitleText>
+        </TitleElement>
+      </TitleDetail>
+    </DescriptiveDetail>
+
+    <PublishingDetail>
+      <Publisher>
+        <PublishingRole>01</PublishingRole>
+        <PublisherName>Portal Test Publisher</PublisherName>
+      </Publisher>
+      <PublishingStatus>11</PublishingStatus>
+    </PublishingDetail>
+  </Product>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       PRODUCT 5 — Advance notice (NotificationType 01)
+                   Parser skips this. Not counted in records_found.
+       ══════════════════════════════════════════════════════════════════════ -->
+  <Product>
+    <RecordReference>PT-SKIP</RecordReference>
+    <NotificationType>01</NotificationType>
+
+    <ProductIdentifier>
+      <ProductIDType>15</ProductIDType>
+      <IDValue>9780000000999</IDValue>
+    </ProductIdentifier>
+
+    <DescriptiveDetail>
+      <ProductComposition>00</ProductComposition>
+      <ProductForm>BC</ProductForm>
+      <TitleDetail>
+        <TitleType>01</TitleType>
+        <TitleElement>
+          <TitleElementLevel>01</TitleElementLevel>
+          <TitleText>Advance Notice — Parser Should Skip This Record</TitleText>
+        </TitleElement>
+      </TitleDetail>
+    </DescriptiveDetail>
+
+    <PublishingDetail>
+      <Publisher>
+        <PublishingRole>01</PublishingRole>
+        <PublisherName>Portal Test Publisher</PublisherName>
+      </Publisher>
+      <PublishingStatus>02</PublishingStatus>
+    </PublishingDetail>
+  </Product>
+
+</ONIXMessage>

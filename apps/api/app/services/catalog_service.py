@@ -1,11 +1,54 @@
 import math
-from sqlalchemy import func, select, text
+import re
+import uuid
+from datetime import date, timedelta
+
+from sqlalchemy import func, select, distinct, exists
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.book import Book, BookContributor, Publisher
-from app.schemas.catalog import SearchResponse
+from app.models.book import Book, BookContributor, BookSubject, Publisher
+from app.models.portal import BookDistributor, BookViewEvent, PriceCheckEvent
+from app.models.retailer import RetailerDistributor
+from app.schemas.catalog import FacetsResponse, FormatFacet, SearchResponse, SubjectFacet
 from app.schemas.book import BookSummary, PublisherOut, ContributorOut
+
+# ONIX product form code → human label
+FORM_LABELS: dict[str, str] = {
+    "BB": "Hardback",
+    "BC": "Paperback",
+    "BA": "Trade paperback",
+    "BG": "Spiral bound",
+    "AC": "Audio CD",
+    "AJ": "Downloadable audio",
+    "DG": "E-book",
+    "DH": "E-book",
+    "PI": "Illustrated",
+    "ZZ": "Other",
+}
+
+# BIC subject scheme ID in book_subjects table
+BIC_SCHEME = "12"
+
+_ISBN_RE = re.compile(r"^97[89]\d{10}$|^\d{10}$")
+
+
+def _is_isbn(q: str) -> bool:
+    return bool(_ISBN_RE.match(q.replace("-", "").replace(" ", "")))
+
+
+def _date_preset_range(preset: str) -> tuple[date | None, date | None]:
+    """Return (from_date, to_date) for a named preset. None means open-ended."""
+    today = date.today()
+    if preset == "new":
+        return today - timedelta(days=30), today
+    if preset == "recent":
+        return today - timedelta(days=90), today
+    if preset == "coming_soon":
+        return today + timedelta(days=1), None
+    if preset == "backlist":
+        return None, today - timedelta(days=365)
+    return None, None
 
 
 async def search_catalog(
@@ -18,35 +61,57 @@ async def search_catalog(
     language_code: str | None = None,
     pub_date_from: str | None = None,
     pub_date_to: str | None = None,
+    pub_date_preset: str | None = None,
     in_print_only: bool = True,
+    uk_rights_only: bool = False,
+    price_band: str | None = None,       # "under10" | "10to20" | "over20"
+    with_trade_price: bool = False,       # filter to titles the retailer can price
+    retailer_id: uuid.UUID | None = None, # resolved from auth token when with_trade_price=True
+    sort: str | None = None,              # "newest" | "oldest" | "title_az" | "price_asc" | "price_desc" | "relevance" | "popular"
     page: int = 1,
     page_size: int = 20,
 ) -> SearchResponse:
     page_size = min(page_size, 100)
     offset = (page - 1) * page_size
 
-    # Base query with eager-loaded publisher and contributors
-    stmt = (
-        select(Book)
-        .options(
+    # ISBN short-circuit: skip FTS and go straight to the book
+    if q and _is_isbn(q):
+        clean = q.replace("-", "").replace(" ", "")
+        isbn13 = clean if len(clean) == 13 else None
+        isbn10 = clean if len(clean) == 10 else None
+        isbn_stmt = select(Book).options(
             selectinload(Book.publisher),
             selectinload(Book.contributors),
         )
+        if isbn13:
+            isbn_stmt = isbn_stmt.where(Book.isbn13 == isbn13)
+        else:
+            isbn_stmt = isbn_stmt.where(Book.isbn10 == isbn10)
+        books = (await db.execute(isbn_stmt)).scalars().unique().all()
+        return SearchResponse(
+            results=[_to_summary(b) for b in books],
+            total=len(books),
+            page=1,
+            page_size=page_size,
+            pages=1 if books else 0,
+            query=q,
+        )
+
+    stmt = select(Book).options(
+        selectinload(Book.publisher),
+        selectinload(Book.contributors),
     )
 
-    # Full-text search using websearch_to_tsquery (handles quoted phrases and - exclusions)
-    if q and q.strip():
+    # Full-text search
+    has_query = q and q.strip()
+    if has_query:
         stmt = stmt.where(
             Book.search_vector.op("@@")(
                 func.websearch_to_tsquery("english", q)
             )
-        ).order_by(
-            func.ts_rank(Book.search_vector, func.websearch_to_tsquery("english", q)).desc()
         )
-    else:
-        stmt = stmt.order_by(Book.publication_date.desc())
 
-    # Author filter — join to contributors, partial match
+    # Author filter
     if author:
         stmt = stmt.join(BookContributor, BookContributor.book_id == Book.id).where(
             BookContributor.role_code == "A01",
@@ -61,27 +126,121 @@ async def search_catalog(
             func.lower(Publisher.name).contains(func.lower(publisher_name))
         )
 
-    # Structured filters
+    # Format filter — exclude ebooks from default browse
     if product_form:
         stmt = stmt.where(Book.product_form == product_form)
     else:
-        # Exclude digital formats (ebooks) from the default catalog view
         stmt = stmt.where(Book.product_form.notin_(["DG", "DH"]))
-    if language_code:
-        stmt = stmt.where(Book.language_code == language_code)
-    if in_print_only:
-        stmt = stmt.where(Book.out_of_print == False)  # noqa: E712
-    if pub_date_from:
-        stmt = stmt.where(Book.publication_date >= pub_date_from)
-    if pub_date_to:
-        stmt = stmt.where(Book.publication_date <= pub_date_to)
+
+    # Subject filter
     if subject_code:
-        from app.models.book import BookSubject
         stmt = stmt.join(BookSubject, BookSubject.book_id == Book.id).where(
-            BookSubject.subject_code == subject_code
+            BookSubject.subject_code == subject_code,
+            BookSubject.scheme_id == BIC_SCHEME,
         )
 
-    # Count total results
+    # Language filter
+    if language_code:
+        stmt = stmt.where(Book.language_code == language_code)
+
+    # Availability
+    if in_print_only:
+        stmt = stmt.where(Book.out_of_print == False)  # noqa: E712
+
+    # UK rights
+    if uk_rights_only:
+        stmt = stmt.where(Book.uk_rights == True)  # noqa: E712
+
+    # Price band
+    if price_band == "under10":
+        stmt = stmt.where(Book.rrp_gbp < 10)
+    elif price_band == "10to20":
+        stmt = stmt.where(Book.rrp_gbp >= 10, Book.rrp_gbp <= 20)
+    elif price_band == "over20":
+        stmt = stmt.where(Book.rrp_gbp > 20)
+
+    # With trade price — filter to books carried by a distributor the retailer has
+    # an approved account with. Joins book_distributors ↔ retailer_distributors.
+    if with_trade_price and retailer_id is not None:
+        stmt = stmt.where(
+            exists(
+                select(BookDistributor.id)
+                .join(
+                    RetailerDistributor,
+                    RetailerDistributor.distributor_code == BookDistributor.distributor_code,
+                )
+                .where(
+                    BookDistributor.book_id == Book.id,
+                    RetailerDistributor.retailer_id == retailer_id,
+                    RetailerDistributor.status == "approved",
+                )
+            )
+        )
+
+    # Date preset overrides manual date range
+    if pub_date_preset:
+        from_d, to_d = _date_preset_range(pub_date_preset)
+        if from_d:
+            stmt = stmt.where(Book.publication_date >= from_d)
+        if to_d:
+            stmt = stmt.where(Book.publication_date <= to_d)
+    else:
+        if pub_date_from:
+            stmt = stmt.where(Book.publication_date >= pub_date_from)
+        if pub_date_to:
+            stmt = stmt.where(Book.publication_date <= pub_date_to)
+
+    # Sort
+    effective_sort = sort or ("relevance" if has_query else "newest")
+    if effective_sort == "popular":
+        # Demand-aware: rank by combined view + price-check event counts (last 90 days)
+        cutoff = date.today() - timedelta(days=90)
+        view_counts = (
+            select(
+                BookViewEvent.book_id,
+                func.count(BookViewEvent.id).label("views"),
+            )
+            .where(BookViewEvent.created_at >= cutoff)
+            .group_by(BookViewEvent.book_id)
+            .subquery()
+        )
+        price_counts = (
+            select(
+                PriceCheckEvent.book_id,
+                func.count(PriceCheckEvent.id).label("checks"),
+            )
+            .where(PriceCheckEvent.created_at >= cutoff)
+            .group_by(PriceCheckEvent.book_id)
+            .subquery()
+        )
+        stmt = (
+            stmt
+            .outerjoin(view_counts, view_counts.c.book_id == Book.id)
+            .outerjoin(price_counts, price_counts.c.book_id == Book.id)
+            .order_by(
+                (
+                    func.coalesce(view_counts.c.views, 0)
+                    + func.coalesce(price_counts.c.checks, 0)
+                ).desc(),
+                Book.publication_date.desc().nullslast(),
+            )
+        )
+    elif effective_sort == "relevance" and has_query:
+        stmt = stmt.order_by(
+            func.ts_rank(Book.search_vector, func.websearch_to_tsquery("english", q)).desc()
+        )
+    elif effective_sort == "oldest":
+        stmt = stmt.order_by(Book.publication_date.asc().nullslast())
+    elif effective_sort == "title_az":
+        stmt = stmt.order_by(Book.title.asc())
+    elif effective_sort == "price_asc":
+        stmt = stmt.order_by(Book.rrp_gbp.asc().nullslast())
+    elif effective_sort == "price_desc":
+        stmt = stmt.order_by(Book.rrp_gbp.desc().nullslast())
+    else:  # newest (default)
+        stmt = stmt.order_by(Book.publication_date.desc().nullslast())
+
+    # Count
     count_stmt = select(func.count()).select_from(stmt.subquery())
     total = (await db.execute(count_stmt)).scalar_one()
 
@@ -97,6 +256,59 @@ async def search_catalog(
         pages=math.ceil(total / page_size) if total > 0 else 0,
         query=q,
     )
+
+
+async def get_facets(db: AsyncSession) -> FacetsResponse:
+    """
+    Return subject category counts (BIC scheme) and format counts
+    for the active, in-print catalogue. Used to populate the filter sidebar.
+    """
+    # Top BIC subject categories by book count
+    subject_rows = await db.execute(
+        select(
+            BookSubject.subject_code,
+            BookSubject.subject_heading,
+            func.count(distinct(BookSubject.book_id)).label("cnt"),
+        )
+        .join(Book, Book.id == BookSubject.book_id)
+        .where(
+            BookSubject.scheme_id == BIC_SCHEME,
+            BookSubject.subject_heading.isnot(None),
+            Book.out_of_print == False,  # noqa: E712
+            Book.product_form.notin_(["DG", "DH"]),
+        )
+        .group_by(BookSubject.subject_code, BookSubject.subject_heading)
+        .order_by(func.count(distinct(BookSubject.book_id)).desc())
+        .limit(15)
+    )
+
+    subjects = [
+        SubjectFacet(code=r.subject_code, label=r.subject_heading, count=r.cnt)
+        for r in subject_rows.all()
+    ]
+
+    # Format counts
+    format_rows = await db.execute(
+        select(
+            Book.product_form,
+            func.count(Book.id).label("cnt"),
+        )
+        .where(Book.out_of_print == False)  # noqa: E712
+        .group_by(Book.product_form)
+        .order_by(func.count(Book.id).desc())
+    )
+
+    formats = [
+        FormatFacet(
+            code=r.product_form,
+            label=FORM_LABELS.get(r.product_form, r.product_form),
+            count=r.cnt,
+        )
+        for r in format_rows.all()
+        if r.product_form not in ("DG", "DH")  # hide ebooks from format list
+    ]
+
+    return FacetsResponse(subjects=subjects, formats=formats)
 
 
 def _to_summary(book: Book) -> BookSummary:

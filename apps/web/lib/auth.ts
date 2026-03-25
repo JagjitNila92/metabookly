@@ -31,19 +31,25 @@ export const authOptions: AuthOptions = {
           )
 
           const tokens = response.AuthenticationResult
-          if (!tokens?.IdToken) return null
+          if (!tokens?.IdToken || !tokens?.AccessToken) return null
 
-          // Decode the ID token payload (base64url → JSON) to extract sub + email
+          // Decode the ID token payload to extract sub + email (ID token has user attributes)
           const payload = JSON.parse(
             Buffer.from(tokens.IdToken.split('.')[1], 'base64url').toString(),
           )
+
+          // Decode access token to extract Cognito groups
+          const accessPayload = JSON.parse(
+            Buffer.from(tokens.AccessToken.split('.')[1], 'base64url').toString(),
+          )
+          const groups: string[] = accessPayload['cognito:groups'] ?? []
 
           return {
             id: payload.sub as string,
             email: credentials.email,
             name: payload.name ?? credentials.email,
-            // Pass the Cognito ID token through so we can forward it to the API
-            idToken: tokens.IdToken,
+            accessToken: tokens.AccessToken,
+            groups,
           }
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : String(err)
@@ -59,16 +65,17 @@ export const authOptions: AuthOptions = {
 
   callbacks: {
     async jwt({ token, user }) {
-      // `user` is only set on the first sign-in
       if (user) {
-        token.idToken = (user as unknown as { idToken: string }).idToken
+        const u = user as unknown as { accessToken: string; groups: string[] }
+        token.accessToken = u.accessToken
         token.sub = user.id
+        token.groups = u.groups
       }
       return token
     },
     async session({ session, token }) {
-      // Expose the Cognito ID token on the session for API calls
-      session.idToken = token.idToken as string
+      session.accessToken = token.accessToken as string
+      session.groups = (token.groups as string[]) ?? []
       if (session.user) {
         session.user.id = token.sub as string
       }

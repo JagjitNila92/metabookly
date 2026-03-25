@@ -5,6 +5,7 @@ import { ChevronLeft, Calendar, Hash, BookOpen, Globe, Tag, Ruler } from 'lucide
 import { getBook } from '@/lib/api'
 import { BookCover } from '@/components/BookCover'
 import { PricingPanel } from '@/components/PricingPanel'
+import { AddToBasket } from '@/components/AddToBasket'
 import {
   PRODUCT_FORM,
   PUBLISHING_STATUS,
@@ -93,6 +94,9 @@ export default async function BookDetailPage({ params }: Props) {
 
           {/* Trade pricing panel — auth-gated, client-side */}
           <PricingPanel isbn13={book.isbn13} rrpGbp={book.rrp_gbp} />
+
+          {/* Add to basket — retailer only, client-side */}
+          <AddToBasket isbn13={book.isbn13} />
 
           {/* UK rights */}
           {book.uk_rights !== null && (

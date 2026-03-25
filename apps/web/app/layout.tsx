@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { BookOpen } from 'lucide-react'
 import { Providers } from '@/components/Providers'
 import { AuthButton } from '@/components/AuthButton'
+import { NavLinks } from '@/components/NavLinks'
 import './globals.css'
 
 const inter = Inter({ subsets: ['latin'] })
@@ -25,11 +26,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <BookOpen className="text-amber-500" size={22} />
               <span>Metabookly</span>
             </Link>
-            <nav className="flex items-center gap-4 text-sm text-slate-600">
-              <Link href="/catalog" className="hover:text-amber-600 transition-colors">
-                Catalog
-              </Link>
-            </nav>
+            <NavLinks />
             <div className="ml-auto flex items-center gap-3">
               <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium hidden sm:block">
                 MVP Demo

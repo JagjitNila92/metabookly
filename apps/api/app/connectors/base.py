@@ -9,6 +9,14 @@ class AbstractDistributorConnector(ABC):
     """
 
     @property
+    def requires_credentials(self) -> bool:
+        """
+        Return False for connectors that don't need Secrets Manager credentials
+        (e.g. mock/demo connectors). Defaults to True for real distributors.
+        """
+        return True
+
+    @property
     @abstractmethod
     def distributor_code(self) -> str:
         """Unique identifier for this distributor e.g. 'GARDNERS'"""

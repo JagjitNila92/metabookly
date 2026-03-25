@@ -71,6 +71,13 @@ export class AuthStack extends cdk.Stack {
       description: 'Metabookly platform administrators',
     });
 
+    // Publishers and distributors who submit ONIX feeds via the supplier portal
+    new cognito.CfnUserPoolGroup(this, 'PublisherGroup', {
+      userPoolId: this.retailerUserPool.userPoolId,
+      groupName: 'publishers',
+      description: 'Publishers and distributors who submit ONIX feeds and manage metadata',
+    });
+
     new cdk.CfnOutput(this, 'UserPoolId', {
       value: this.retailerUserPool.userPoolId,
       exportName: 'MetabooklyUserPoolId',

@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ONIXMessage release="3.0" xmlns="http://ns.editeur.org/onix/3.0/reference">
+  <Header>
+    <Sender><SenderName>Test Publisher</SenderName></Sender>
+    <SentDateTime>20260317</SentDateTime>
+    <MessageNumber>2</MessageNumber>
+  </Header>
+
+  <!-- Same book, different description — should create a conflict -->
+  <Product>
+    <RecordReference>conflict-test-001</RecordReference>
+    <NotificationType>03</NotificationType>
+    <ProductIdentifier>
+      <ProductIDType>15</ProductIDType>
+      <IDValue>9780262046305</IDValue>
+    </ProductIdentifier>
+    <DescriptiveDetail>
+      <ProductComposition>00</ProductComposition>
+      <ProductForm>BC</ProductForm>
+      <TitleDetail>
+        <TitleType>01</TitleType>
+        <TitleElement>
+          <TitleElementLevel>01</TitleElementLevel>
+          <TitleText>Invisible Infrastructure</TitleText>
+        </TitleElement>
+      </TitleDetail>
+      <Contributor>
+        <SequenceNumber>1</SequenceNumber>
+        <ContributorRole>A01</ContributorRole>
+        <PersonName>Jane Doe</PersonName>
+      </Contributor>
+      <Language>
+        <LanguageRole>01</LanguageRole>
+        <LanguageCode>eng</LanguageCode>
+      </Language>
+    </DescriptiveDetail>
+    <CollateralDetail>
+      <TextContent>
+        <TextType>03</TextType>
+        <ContentAudience>00</ContentAudience>
+        <Text>Publisher's original description: this book covers infrastructure topics in depth.</Text>
+      </TextContent>
+    </CollateralDetail>
+    <PublishingDetail>
+      <PublishingStatus>04</PublishingStatus>
+    </PublishingDetail>
+    <SupplyDetail>
+      <Supplier>
+        <SupplierRole>01</SupplierRole>
+        <SupplierName>Test Publisher</SupplierName>
+      </Supplier>
+      <SupplyToTerritory>
+        <RegionsIncluded>WORLD</RegionsIncluded>
+      </SupplyToTerritory>
+      <ProductAvailability>20</ProductAvailability>
+    </SupplyDetail>
+  </Product>
+
+</ONIXMessage>

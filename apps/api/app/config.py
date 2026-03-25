@@ -34,10 +34,21 @@ class Settings(BaseSettings):
     onix_bucket_name: str = "metabookly-onix-feeds-562675430068"
     assets_bucket_name: str = "metabookly-assets-562675430068"
 
+    # Bedrock
+    bedrock_model_id: str = "anthropic.claude-haiku-4-5-20251001-v1:0"
+
+    # SES — transactional email
+    ses_from_email: str = "noreply@metabookly.com"
+    # Admin email receives distributor notifications until distributor logins are built
+    ses_admin_email: str = "jagjitnila@gmail.com"
+
     # Cognito
     cognito_user_pool_id: str = "eu-west-2_Hb5mR6Ugo"
     cognito_client_id: str = "7khfisn3jq5iv9r1k27sgm5clt"
     cognito_region: str = "eu-west-2"
+
+    # Dev/demo flags
+    enable_mock_advance: bool = False   # Set ENABLE_MOCK_ADVANCE=true to enable POST /orders/{id}/_advance
 
     def resolve_database_url(self) -> str:
         """
