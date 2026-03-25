@@ -22,9 +22,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_db, require_admin, require_publisher, require_retailer
 from app.auth.models import CurrentUser
 from app.models.book import Book, BookSubject
-from app.models.ordering import Order, OrderLine, OrderLineItem
+from app.models.ordering import Order, OrderLine, OrderLineItem, RetailerAddress
 from app.models.portal import BookDistributor, BookViewEvent, FeedSource, OnixFeedV2, PriceCheckEvent, SearchEvent
-from app.models.retailer import Retailer, RetailerAddress, RetailerDistributor
+from app.models.retailer import Retailer, RetailerDistributor
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/analytics", tags=["analytics"])
