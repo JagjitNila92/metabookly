@@ -7,6 +7,8 @@ import { BookCard } from '@/components/BookCard'
 import { SearchBar } from '@/components/SearchBar'
 import { FilterPanel } from '@/components/FilterPanel'
 import { Pagination } from '@/components/Pagination'
+import { ActiveFilters } from '@/components/ActiveFilters'
+import { ResultsToolbar } from '@/components/ResultsToolbar'
 
 export const metadata: Metadata = { title: 'Catalog' }
 
@@ -18,6 +20,8 @@ interface PageProps {
     product_form?: string
     subject_code?: string
     pub_date_preset?: string
+    pub_date_from?: string
+    pub_date_to?: string
     in_print_only?: string
     uk_rights_only?: string
     price_band?: string
@@ -46,6 +50,8 @@ export default async function CatalogPage({ searchParams }: PageProps) {
       product_form: searchParams.product_form,
       subject_code: searchParams.subject_code,
       pub_date_preset: searchParams.pub_date_preset,
+      pub_date_from: searchParams.pub_date_from,
+      pub_date_to: searchParams.pub_date_to,
       in_print_only: inPrintOnly,
       uk_rights_only: ukRightsOnly,
       price_band: searchParams.price_band,
@@ -58,24 +64,27 @@ export default async function CatalogPage({ searchParams }: PageProps) {
     getCatalogFacets(),
   ])
 
-  const hasQuery = !!(
-    searchParams.q || searchParams.author || searchParams.publisher ||
-    searchParams.product_form || searchParams.subject_code
-  )
+  const currentFilters = {
+    author: searchParams.author ?? '',
+    publisher: searchParams.publisher ?? '',
+    product_form: searchParams.product_form ?? '',
+    subject_code: searchParams.subject_code ?? '',
+    pub_date_preset: searchParams.pub_date_preset ?? '',
+    pub_date_from: searchParams.pub_date_from ?? '',
+    pub_date_to: searchParams.pub_date_to ?? '',
+    in_print_only: inPrintOnly,
+    uk_rights_only: ukRightsOnly,
+    price_band: searchParams.price_band ?? '',
+    with_trade_price: withTradePrice,
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
       {/* Search bar */}
-      <div className="mb-6 flex flex-col sm:flex-row gap-3 items-start sm:items-center">
-        <div className="flex-1 w-full">
-          <Suspense>
-            <SearchBar defaultValue={searchParams.q ?? ''} />
-          </Suspense>
-        </div>
-        <p className="text-sm text-slate-500 shrink-0">
-          {data.total.toLocaleString()} title{data.total !== 1 ? 's' : ''}
-          {hasQuery && searchParams.q ? ` for "${searchParams.q}"` : ''}
-        </p>
+      <div className="mb-6">
+        <Suspense>
+          <SearchBar defaultValue={searchParams.q ?? ''} />
+        </Suspense>
       </div>
 
       <div className="flex flex-col md:flex-row gap-8">
@@ -84,23 +93,22 @@ export default async function CatalogPage({ searchParams }: PageProps) {
           <FilterPanel
             facets={facets}
             isRetailer={isRetailer}
-            current={{
-              product_form: searchParams.product_form ?? '',
-              subject_code: searchParams.subject_code ?? '',
-              pub_date_preset: searchParams.pub_date_preset ?? '',
-              in_print_only: inPrintOnly,
-              uk_rights_only: ukRightsOnly,
-              price_band: searchParams.price_band ?? '',
-              with_trade_price: withTradePrice,
-              sort: searchParams.sort ?? '',
-              author: searchParams.author ?? '',
-              publisher: searchParams.publisher ?? '',
-            }}
+            current={currentFilters}
           />
         </Suspense>
 
-        {/* Results grid */}
+        {/* Results column */}
         <div className="flex-1 min-w-0">
+          {/* Active filter chips */}
+          <Suspense>
+            <ActiveFilters facets={facets} current={currentFilters} />
+          </Suspense>
+
+          {/* Results count + sort */}
+          <Suspense>
+            <ResultsToolbar total={data.total} query={searchParams.q} />
+          </Suspense>
+
           {data.results.length === 0 ? (
             <div className="text-center py-20 text-slate-400">
               <p className="text-lg font-medium mb-1">No books found</p>

@@ -2,9 +2,11 @@
 
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import { useTransition, useState, useEffect, useRef } from 'react'
-import { SlidersHorizontal, X } from 'lucide-react'
+import { SlidersHorizontal, X, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { FacetsResponse } from '@/lib/types'
+
+const SUBJECTS_DEFAULT_VISIBLE = 8
 
 const DATE_PRESETS = [
   { value: 'new', label: 'New this month' },
@@ -19,16 +21,6 @@ const PRICE_BANDS = [
   { value: 'over20', label: 'Over £20' },
 ]
 
-const SORT_OPTIONS = [
-  { value: '', label: 'Relevance / Newest' },
-  { value: 'popular', label: 'Most popular' },
-  { value: 'newest', label: 'Newest first' },
-  { value: 'oldest', label: 'Oldest first' },
-  { value: 'title_az', label: 'Title A–Z' },
-  { value: 'price_asc', label: 'Price: low–high' },
-  { value: 'price_desc', label: 'Price: high–low' },
-]
-
 interface FilterPanelProps {
   facets: FacetsResponse
   isRetailer?: boolean
@@ -36,11 +28,12 @@ interface FilterPanelProps {
     product_form: string
     subject_code: string
     pub_date_preset: string
+    pub_date_from: string
+    pub_date_to: string
     in_print_only: boolean
     uk_rights_only: boolean
     price_band: string
     with_trade_price: boolean
-    sort: string
     author: string
     publisher: string
   }
@@ -52,15 +45,25 @@ export function FilterPanel({ facets, isRetailer = false, current }: FilterPanel
   const searchParams = useSearchParams()
   const [, startTransition] = useTransition()
 
-  // Controlled inputs for author/publisher with debounced URL push
+  // Subject list collapse
+  const [showAllSubjects, setShowAllSubjects] = useState(false)
+
+  // Controlled inputs with debounced URL push
   const [authorInput, setAuthorInput] = useState(current.author)
   const [publisherInput, setPublisherInput] = useState(current.publisher)
+  const [dateFromInput, setDateFromInput] = useState(current.pub_date_from)
+  const [dateToInput, setDateToInput] = useState(current.pub_date_to)
+
   const authorTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const publisherTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const dateFromTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const dateToTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Keep local state in sync when URL changes (e.g. clear all)
+  // Sync local state back from URL (e.g. when clear all fires)
   useEffect(() => { setAuthorInput(current.author) }, [current.author])
   useEffect(() => { setPublisherInput(current.publisher) }, [current.publisher])
+  useEffect(() => { setDateFromInput(current.pub_date_from) }, [current.pub_date_from])
+  useEffect(() => { setDateToInput(current.pub_date_to) }, [current.pub_date_to])
 
   const setParam = (key: string, value: string | null) => {
     const params = new URLSearchParams(searchParams.toString())
@@ -89,10 +92,52 @@ export function FilterPanel({ facets, isRetailer = false, current }: FilterPanel
     publisherTimer.current = setTimeout(() => setParam('publisher', value || null), 400)
   }
 
+  // Selecting a preset clears any custom range
+  const handlePresetClick = (value: string | null) => {
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete('pub_date_from')
+    params.delete('pub_date_to')
+    params.delete('page')
+    if (value) params.set('pub_date_preset', value)
+    else params.delete('pub_date_preset')
+    setDateFromInput('')
+    setDateToInput('')
+    startTransition(() => router.push(`${pathname}?${params}`))
+  }
+
+  // Setting a custom date clears any preset
+  const handleDateFromChangeWithPresetClear = (value: string) => {
+    setDateFromInput(value)
+    if (dateFromTimer.current) clearTimeout(dateFromTimer.current)
+    dateFromTimer.current = setTimeout(() => {
+      const params = new URLSearchParams(searchParams.toString())
+      params.delete('pub_date_preset')
+      params.delete('page')
+      if (value) params.set('pub_date_from', value)
+      else params.delete('pub_date_from')
+      startTransition(() => router.push(`${pathname}?${params}`))
+    }, 600)
+  }
+
+  const handleDateToChangeWithPresetClear = (value: string) => {
+    setDateToInput(value)
+    if (dateToTimer.current) clearTimeout(dateToTimer.current)
+    dateToTimer.current = setTimeout(() => {
+      const params = new URLSearchParams(searchParams.toString())
+      params.delete('pub_date_preset')
+      params.delete('page')
+      if (value) params.set('pub_date_to', value)
+      else params.delete('pub_date_to')
+      startTransition(() => router.push(`${pathname}?${params}`))
+    }, 600)
+  }
+
   const activeFilterCount = [
     current.product_form,
     current.subject_code,
     current.pub_date_preset,
+    current.pub_date_from,
+    current.pub_date_to,
     current.uk_rights_only,
     current.with_trade_price,
     current.price_band,
@@ -104,9 +149,14 @@ export function FilterPanel({ facets, isRetailer = false, current }: FilterPanel
   const clearAll = () => {
     setAuthorInput('')
     setPublisherInput('')
+    setDateFromInput('')
+    setDateToInput('')
     const params = new URLSearchParams(searchParams.toString())
-    ;['product_form', 'subject_code', 'pub_date_preset', 'uk_rights_only', 'with_trade_price',
-      'price_band', 'sort', 'in_print_only', 'author', 'publisher', 'page'].forEach(k => params.delete(k))
+    ;[
+      'product_form', 'subject_code', 'pub_date_preset', 'pub_date_from', 'pub_date_to',
+      'uk_rights_only', 'with_trade_price', 'price_band', 'sort', 'in_print_only',
+      'author', 'publisher', 'page',
+    ].forEach((k) => params.delete(k))
     startTransition(() => router.push(`${pathname}?${params}`))
   }
 
@@ -156,6 +206,12 @@ export function FilterPanel({ facets, isRetailer = false, current }: FilterPanel
     />
   )
 
+  // Subjects — collapse to SUBJECTS_DEFAULT_VISIBLE, expand on demand
+  const visibleSubjects = showAllSubjects
+    ? facets.subjects
+    : facets.subjects.slice(0, SUBJECTS_DEFAULT_VISIBLE)
+  const hiddenCount = facets.subjects.length - SUBJECTS_DEFAULT_VISIBLE
+
   return (
     <aside className="w-full md:w-56 shrink-0 space-y-6">
 
@@ -178,20 +234,6 @@ export function FilterPanel({ facets, isRetailer = false, current }: FilterPanel
             <X size={11} /> Clear all
           </button>
         )}
-      </div>
-
-      {/* Sort */}
-      <div>
-        <SectionLabel>Sort by</SectionLabel>
-        <select
-          value={current.sort}
-          onChange={(e) => setParam('sort', e.target.value || null)}
-          className="w-full text-sm px-2 py-1.5 border border-slate-200 rounded bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400"
-        >
-          {SORT_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
-        </select>
       </div>
 
       {/* Author */}
@@ -227,7 +269,7 @@ export function FilterPanel({ facets, isRetailer = false, current }: FilterPanel
                 All categories
               </FilterButton>
             </li>
-            {facets.subjects.map((s) => (
+            {visibleSubjects.map((s) => (
               <li key={s.code}>
                 <FilterButton
                   active={current.subject_code === s.code}
@@ -241,6 +283,18 @@ export function FilterPanel({ facets, isRetailer = false, current }: FilterPanel
               </li>
             ))}
           </ul>
+          {hiddenCount > 0 && (
+            <button
+              onClick={() => setShowAllSubjects((v) => !v)}
+              className="mt-1.5 flex items-center gap-1 text-xs text-amber-600 hover:text-amber-700 font-medium px-2"
+            >
+              <ChevronDown
+                size={12}
+                className={cn('transition-transform', showAllSubjects && 'rotate-180')}
+              />
+              {showAllSubjects ? 'Show fewer' : `Show ${hiddenCount} more`}
+            </button>
+          )}
         </div>
       )}
 
@@ -278,8 +332,8 @@ export function FilterPanel({ facets, isRetailer = false, current }: FilterPanel
         <ul className="space-y-0.5">
           <li>
             <FilterButton
-              active={!current.pub_date_preset}
-              onClick={() => setParam('pub_date_preset', null)}
+              active={!current.pub_date_preset && !current.pub_date_from && !current.pub_date_to}
+              onClick={() => handlePresetClick(null)}
             >
               Any time
             </FilterButton>
@@ -288,13 +342,38 @@ export function FilterPanel({ facets, isRetailer = false, current }: FilterPanel
             <li key={d.value}>
               <FilterButton
                 active={current.pub_date_preset === d.value}
-                onClick={() => setParam('pub_date_preset', d.value)}
+                onClick={() => handlePresetClick(d.value)}
               >
                 {d.label}
               </FilterButton>
             </li>
           ))}
         </ul>
+
+        {/* Custom date range */}
+        <div className="mt-2 space-y-1.5">
+          <p className="text-[11px] text-slate-400 font-medium uppercase tracking-wide px-1">
+            Custom range
+          </p>
+          <div>
+            <label className="text-xs text-slate-500 px-1">From</label>
+            <input
+              type="date"
+              value={dateFromInput}
+              onChange={(e) => handleDateFromChangeWithPresetClear(e.target.value)}
+              className="w-full mt-0.5 text-sm px-2 py-1.5 border border-slate-200 rounded bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-slate-500 px-1">To</label>
+            <input
+              type="date"
+              value={dateToInput}
+              onChange={(e) => handleDateToChangeWithPresetClear(e.target.value)}
+              className="w-full mt-0.5 text-sm px-2 py-1.5 border border-slate-200 rounded bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400"
+            />
+          </div>
+        </div>
       </div>
 
       {/* Price band */}
