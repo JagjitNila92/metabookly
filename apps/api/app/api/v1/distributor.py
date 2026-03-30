@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_db, require_admin
 from app.auth.models import CurrentUser
 from app.connectors.registry import get_connector
+from app.models.ordering import Order, OrderLine, OrderLineItem
 from app.models.retailer import Retailer, RetailerDistributor
 from app.schemas.retailer import AccountRequestOut, ApproveRequest, ReviewRequest, RetailerSummary
 from app.services.email_service import (
@@ -167,3 +168,101 @@ async def reject_request(
         rejection_reason=body.rejection_reason,
     )
     return _request_out(account)
+
+
+# ─── Distributor orders view ───────────────────────────────────────────────────
+
+@router.get("/orders")
+async def list_distributor_orders(
+    distributor_code: str = Query(...),
+    order_type: str | None = Query(None),
+    status_filter: str | None = Query(None, alias="status"),
+    cursor: str | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    _: CurrentUser = Depends(require_admin),
+) -> dict:
+    """
+    List all order lines sent to a given distributor, newest first.
+    Returns order + retailer context alongside each line's items.
+    """
+    from sqlalchemy.orm import selectinload
+    PAGE = 25
+
+    stmt = (
+        select(OrderLine)
+        .join(Order, Order.id == OrderLine.order_id)
+        .join(Retailer, Retailer.id == Order.retailer_id)
+        .options(selectinload(OrderLine.items))
+        .where(OrderLine.distributor_code == distributor_code.upper())
+    )
+
+    if order_type:
+        stmt = stmt.where(Order.order_type == order_type)
+    if status_filter:
+        stmt = stmt.where(OrderLine.status == status_filter)
+    if cursor:
+        from datetime import datetime as dt
+        try:
+            cursor_dt = dt.fromisoformat(cursor)
+            stmt = stmt.where(Order.submitted_at < cursor_dt)
+        except ValueError:
+            pass
+
+    stmt = stmt.order_by(Order.submitted_at.desc()).limit(PAGE + 1)
+    lines = (await db.execute(stmt)).scalars().all()
+    has_more = len(lines) > PAGE
+    lines = lines[:PAGE]
+
+    order_ids = list({l.order_id for l in lines})
+    orders_map: dict = {}
+    retailers_map: dict = {}
+    if order_ids:
+        order_rows = (await db.execute(select(Order).where(Order.id.in_(order_ids)))).scalars().all()
+        for o in order_rows:
+            orders_map[o.id] = o
+        retailer_ids = list({o.retailer_id for o in order_rows})
+        retailer_rows = (await db.execute(select(Retailer).where(Retailer.id.in_(retailer_ids)))).scalars().all()
+        for r in retailer_rows:
+            retailers_map[r.id] = r
+
+    from app.models.book import Book
+    isbn_set = {i.isbn13 for l in lines for i in l.items}
+    titles_map: dict[str, str] = {}
+    if isbn_set:
+        book_rows = (await db.execute(select(Book.isbn13, Book.title).where(Book.isbn13.in_(isbn_set)))).all()
+        titles_map = {r.isbn13: r.title for r in book_rows}
+
+    result = []
+    for line in lines:
+        order = orders_map.get(line.order_id)
+        if not order:
+            continue
+        retailer = retailers_map.get(order.retailer_id)
+        result.append({
+            "order_line_id": str(line.id),
+            "order_id": str(order.id),
+            "po_number": order.po_number,
+            "order_type": order.order_type,
+            "order_status": order.status,
+            "line_status": line.status,
+            "submitted_at": order.submitted_at.isoformat() if order.submitted_at else None,
+            "retailer_company": retailer.company_name if retailer else "Unknown",
+            "subtotal_gbp": str(line.subtotal_gbp) if line.subtotal_gbp is not None else None,
+            "items": [
+                {
+                    "isbn13": i.isbn13,
+                    "title": titles_map.get(i.isbn13),
+                    "quantity_ordered": i.quantity_ordered,
+                    "quantity_confirmed": i.quantity_confirmed,
+                    "status": i.status,
+                    "trade_price_gbp": str(i.trade_price_gbp) if i.trade_price_gbp is not None else None,
+                }
+                for i in line.items
+            ],
+        })
+
+    next_cursor = None
+    if has_more and result:
+        next_cursor = result[-1]["submitted_at"]
+
+    return {"orders": result, "next_cursor": next_cursor}

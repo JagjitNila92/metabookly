@@ -98,6 +98,7 @@ def _account_out(account: RetailerDistributor) -> LinkedAccountOut:
         account_number=account.account_number,
         status=account.status,
         rejection_reason=account.rejection_reason,
+        gratis_enabled=account.gratis_enabled,
         created_at=account.created_at,
     )
 

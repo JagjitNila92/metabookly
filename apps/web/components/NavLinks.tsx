@@ -138,7 +138,10 @@ export function NavLinks() {
 
       {/* Admin-only distributor tools */}
       {isAdmin && adminView === 'retailer' && (
-        <NavLink href="/distributor/requests">Requests</NavLink>
+        <>
+          <NavLink href="/distributor/requests">Requests</NavLink>
+          <NavLink href="/distributor/orders">Orders</NavLink>
+        </>
       )}
 
       {/* Admin switcher */}
