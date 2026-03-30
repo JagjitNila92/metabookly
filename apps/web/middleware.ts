@@ -17,6 +17,7 @@ export default withAuth(
       pathname.startsWith('/retailer/') ||
       pathname.startsWith('/basket') ||
       pathname.startsWith('/orders') ||
+      pathname.startsWith('/order') ||
       pathname.startsWith('/settings')
     ) {
       if (!isRetailer) {
@@ -59,6 +60,7 @@ export const config = {
     '/basket',
     '/orders/:path*',
     '/orders',
+    '/order/:path*',
     '/settings/:path*',
     '/settings',
     '/publisher/:path*',

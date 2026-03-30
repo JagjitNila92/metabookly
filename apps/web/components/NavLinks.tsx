@@ -118,6 +118,8 @@ export function NavLinks() {
         <>
           <NavLink href="/dashboard">Dashboard</NavLink>
           <NavLink href="/orders">Orders</NavLink>
+          <NavLink href="/order/bulk">Quick order</NavLink>
+          <NavLink href="/order/lists">Lists</NavLink>
           <BasketBadge />
           <NavLink href="/settings">Settings</NavLink>
           <NavLink href="/account">My Account</NavLink>

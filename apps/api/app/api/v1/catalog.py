@@ -7,8 +7,8 @@ from app.api.deps import get_db, get_optional_user
 from app.auth.models import CurrentUser
 from app.models.portal import SearchEvent
 from app.models.retailer import Retailer
-from app.schemas.catalog import FacetsResponse, SearchResponse
-from app.services.catalog_service import get_facets, search_catalog
+from app.schemas.catalog import BulkLookupRequest, BulkLookupResponse, FacetsResponse, SearchResponse
+from app.services.catalog_service import bulk_lookup, get_facets, search_catalog
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/catalog", tags=["catalog"])
@@ -109,6 +109,19 @@ async def search(
         )
 
     return result
+
+
+@router.post("/bulk-lookup", response_model=BulkLookupResponse)
+async def catalog_bulk_lookup(
+    body: BulkLookupRequest,
+    db: AsyncSession = Depends(get_db),
+) -> BulkLookupResponse:
+    """
+    Look up up to 500 ISBNs against the catalog in one call.
+    Returns matched (in-print), out_of_print, and not_found groups.
+    No auth required — trade prices are not included here (use basket routing for that).
+    """
+    return await bulk_lookup(db=db, isbns=body.isbns)
 
 
 @router.get("/facets", response_model=FacetsResponse)

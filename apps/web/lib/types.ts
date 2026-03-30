@@ -226,3 +226,48 @@ export interface LinkedAccount {
   rejection_reason: string | null
   created_at: string
 }
+
+// ─── Bulk ordering ────────────────────────────────────────────────────────────
+
+export interface OutOfPrintEntry {
+  isbn13: string
+  title: string | null
+  publisher_name: string | null
+}
+
+export interface BulkLookupResponse {
+  matched: BookSummary[]
+  out_of_print: OutOfPrintEntry[]
+  not_found: string[]
+  duplicates_removed: number
+}
+
+export interface BulkAddResult {
+  added: string[]
+  already_in_basket: string[]
+  failed: string[]
+  basket: BasketResponse | null
+}
+
+// ─── ISBN Lists ───────────────────────────────────────────────────────────────
+
+export interface IsbnListItem {
+  id: string
+  isbn13: string
+  quantity: number
+  note: string | null
+  added_at: string
+}
+
+export interface IsbnList {
+  id: string
+  name: string
+  description: string | null
+  item_count: number
+  created_at: string
+  updated_at: string
+}
+
+export interface IsbnListDetail extends IsbnList {
+  items: IsbnListItem[]
+}

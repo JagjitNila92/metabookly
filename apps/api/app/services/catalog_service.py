@@ -10,7 +10,7 @@ from sqlalchemy.orm import selectinload
 from app.models.book import Book, BookContributor, BookSubject, Publisher
 from app.models.portal import BookDistributor, BookViewEvent, PriceCheckEvent
 from app.models.retailer import RetailerDistributor
-from app.schemas.catalog import FacetsResponse, FormatFacet, SearchResponse, SubjectFacet
+from app.schemas.catalog import BulkLookupResponse, FacetsResponse, FormatFacet, OutOfPrintEntry, SearchResponse, SubjectFacet
 from app.schemas.book import BookSummary, PublisherOut, ContributorOut
 
 # ONIX product form code → human label
@@ -255,6 +255,88 @@ async def search_catalog(
         page_size=page_size,
         pages=math.ceil(total / page_size) if total > 0 else 0,
         query=q,
+    )
+
+
+async def bulk_lookup(db: AsyncSession, isbns: list[str]) -> BulkLookupResponse:
+    """
+    Resolve up to 500 ISBNs against the catalog.
+    - Normalises each input: strips dashes/spaces, converts ISBN-10 → ISBN-13, handles Excel sci notation.
+    - Deduplicates (counts removed dupes).
+    - Returns matched (in-print), out_of_print, and not_found groups.
+    """
+    import re
+    from decimal import InvalidOperation
+
+    def _normalise(raw: str) -> str | None:
+        """Strip formatting and return a 13-digit ISBN string, or None if unparseable."""
+        s = raw.strip().replace("-", "").replace(" ", "")
+        # Handle Excel scientific notation e.g. 9.78123E+12
+        if re.match(r"^\d+\.?\d*[eE][+\-]?\d+$", s):
+            try:
+                s = str(int(float(s)))
+            except (ValueError, OverflowError):
+                return None
+        s = re.sub(r"[^\d]", "", s)
+        if len(s) == 13 and s.startswith(("978", "979")):
+            return s
+        if len(s) == 10:
+            # Convert ISBN-10 to ISBN-13
+            core = "978" + s[:9]
+            check = (10 - sum(int(d) * (1 if i % 2 == 0 else 3) for i, d in enumerate(core)) % 10) % 10
+            return core + str(check)
+        return None
+
+    # Normalise and deduplicate, preserving order
+    seen: dict[str, bool] = {}
+    duplicates_removed = 0
+    normalised: list[str] = []
+    for raw in isbns[:500]:
+        isbn = _normalise(raw)
+        if isbn is None:
+            continue
+        if isbn in seen:
+            duplicates_removed += 1
+        else:
+            seen[isbn] = True
+            normalised.append(isbn)
+
+    if not normalised:
+        return BulkLookupResponse(matched=[], out_of_print=[], not_found=[], duplicates_removed=duplicates_removed)
+
+    # Batch query
+    rows = (
+        await db.execute(
+            select(Book)
+            .options(selectinload(Book.publisher), selectinload(Book.contributors))
+            .where(Book.isbn13.in_(normalised))
+        )
+    ).scalars().unique().all()
+
+    found_map = {b.isbn13: b for b in rows}
+
+    matched: list[BookSummary] = []
+    out_of_print: list[OutOfPrintEntry] = []
+    not_found: list[str] = []
+
+    for isbn in normalised:
+        book = found_map.get(isbn)
+        if book is None:
+            not_found.append(isbn)
+        elif book.out_of_print:
+            out_of_print.append(OutOfPrintEntry(
+                isbn13=isbn,
+                title=book.title,
+                publisher_name=book.publisher.name if book.publisher else None,
+            ))
+        else:
+            matched.append(_to_summary(book))
+
+    return BulkLookupResponse(
+        matched=matched,
+        out_of_print=out_of_print,
+        not_found=not_found,
+        duplicates_removed=duplicates_removed,
     )
 
 

@@ -44,6 +44,8 @@ class RetailerDistributor(Base):
     # pending → approved | rejected; retailer can withdraw pending/rejected requests
     status: Mapped[str] = mapped_column(Text, nullable=False, default="pending")
     rejection_reason: Mapped[str | None] = mapped_column(Text)
+    # Set by admin on approval — allows retailer to place gratis (FOC) orders via this distributor
+    gratis_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(default=func.now())
     updated_at: Mapped[datetime] = mapped_column(default=func.now(), onupdate=func.now())
 

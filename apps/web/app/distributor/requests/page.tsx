@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Loader2, CheckCircle2, XCircle, Clock } from 'lucide-react'
+import { Loader2, CheckCircle2, XCircle, Clock, Gift } from 'lucide-react'
 
 type Request = {
   id: string
@@ -10,6 +10,7 @@ type Request = {
   account_number: string | null
   status: string
   rejection_reason: string | null
+  gratis_enabled: boolean
   retailer: {
     id: string
     company_name: string
@@ -33,6 +34,8 @@ export default function DistributorRequestsPage() {
   const [actionId, setActionId] = useState<string | null>(null)
   const [rejectingId, setRejectingId] = useState<string | null>(null)
   const [rejectionReason, setRejectionReason] = useState('')
+  // Per-request gratis toggle (keyed by request ID, only relevant when approving)
+  const [gratisMap, setGratisMap] = useState<Record<string, boolean>>({})
 
   const loadRequests = async (statusFilter: string) => {
     setLoading(true)
@@ -55,7 +58,11 @@ export default function DistributorRequestsPage() {
   const approve = async (requestId: string) => {
     setActionId(requestId)
     try {
-      const res = await fetch(`/api/distributor/requests/${requestId}/approve`, { method: 'POST' })
+      const res = await fetch(`/api/distributor/requests/${requestId}/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gratis_enabled: gratisMap[requestId] ?? false }),
+      })
       if (!res.ok) throw new Error()
       setRequests((prev) => prev.filter((r) => r.id !== requestId))
     } catch {
@@ -128,10 +135,7 @@ export default function DistributorRequestsPage() {
       ) : (
         <div className="space-y-3">
           {requests.map((req) => (
-            <div
-              key={req.id}
-              className="bg-white border border-slate-200 rounded-xl p-5"
-            >
+            <div key={req.id} className="bg-white border border-slate-200 rounded-xl p-5">
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 mb-1">
@@ -149,6 +153,12 @@ export default function DistributorRequestsPage() {
                   {req.rejection_reason && (
                     <p className="text-xs text-red-600 mt-1">Rejection reason: {req.rejection_reason}</p>
                   )}
+                  {/* Gratis badge on approved requests */}
+                  {activeTab === 'approved' && req.gratis_enabled && (
+                    <span className="inline-flex items-center gap-1 mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                      <Gift size={11} /> Gratis ordering enabled
+                    </span>
+                  )}
                   <p className="text-xs text-slate-400 mt-2">
                     Submitted {new Date(req.created_at).toLocaleDateString('en-GB', {
                       day: 'numeric', month: 'short', year: 'numeric',
@@ -158,6 +168,19 @@ export default function DistributorRequestsPage() {
 
                 {activeTab === 'pending' && (
                   <div className="flex flex-col gap-2 shrink-0">
+                    {/* Gratis toggle — shown before approving */}
+                    <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer select-none px-1">
+                      <input
+                        type="checkbox"
+                        checked={gratisMap[req.id] ?? false}
+                        onChange={(e) =>
+                          setGratisMap((prev) => ({ ...prev, [req.id]: e.target.checked }))
+                        }
+                        className="rounded border-slate-300 accent-amber-500"
+                      />
+                      Enable gratis ordering
+                    </label>
+
                     <button
                       onClick={() => approve(req.id)}
                       disabled={actionId === req.id}

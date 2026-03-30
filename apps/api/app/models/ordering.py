@@ -58,6 +58,8 @@ class Order(Base):
     )
     po_number: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     status: Mapped[str] = mapped_column(Text, nullable=False, default="draft")
+    # trade (default) | gratis | sample
+    order_type: Mapped[str] = mapped_column(Text, nullable=False, default="trade")
     billing_address_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("retailer_addresses.id", ondelete="SET NULL"),
     )
@@ -151,3 +153,37 @@ class Invoice(Base):
     created_at: Mapped[datetime] = mapped_column(default=func.now())
 
     order_line: Mapped["OrderLine"] = relationship("OrderLine", back_populates="invoice")
+
+
+class IsbnList(Base):
+    """A named, saved list of ISBNs + quantities belonging to a retailer."""
+    __tablename__ = "isbn_lists"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    retailer_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("retailers.id", ondelete="CASCADE"), nullable=False,
+    )
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(default=func.now(), onupdate=func.now())
+
+    items: Mapped[list["IsbnListItem"]] = relationship(
+        "IsbnListItem", back_populates="isbn_list", cascade="all, delete-orphan",
+        order_by="IsbnListItem.added_at",
+    )
+
+
+class IsbnListItem(Base):
+    __tablename__ = "isbn_list_items"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    list_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("isbn_lists.id", ondelete="CASCADE"), nullable=False,
+    )
+    isbn13: Mapped[str] = mapped_column(Text, nullable=False)
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    note: Mapped[str | None] = mapped_column(Text)
+    added_at: Mapped[datetime] = mapped_column(default=func.now())
+
+    isbn_list: Mapped["IsbnList"] = relationship("IsbnList", back_populates="items")

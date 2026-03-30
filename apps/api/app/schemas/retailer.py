@@ -75,11 +75,16 @@ class AccountRequestOut(BaseModel):
     account_number: str | None
     status: str
     rejection_reason: str | None
+    gratis_enabled: bool
     retailer: RetailerSummary
     created_at: datetime
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class ApproveRequest(BaseModel):
+    gratis_enabled: bool = False
 
 
 class ReviewRequest(BaseModel):

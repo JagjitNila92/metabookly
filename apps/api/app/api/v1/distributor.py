@@ -17,7 +17,7 @@ from app.api.deps import get_db, require_admin
 from app.auth.models import CurrentUser
 from app.connectors.registry import get_connector
 from app.models.retailer import Retailer, RetailerDistributor
-from app.schemas.retailer import AccountRequestOut, ReviewRequest, RetailerSummary
+from app.schemas.retailer import AccountRequestOut, ApproveRequest, ReviewRequest, RetailerSummary
 from app.services.email_service import (
     notify_retailer_request_approved,
     notify_retailer_request_rejected,
@@ -42,6 +42,7 @@ def _request_out(account: RetailerDistributor) -> AccountRequestOut:
         account_number=account.account_number,
         status=account.status,
         rejection_reason=account.rejection_reason,
+        gratis_enabled=account.gratis_enabled,
         retailer=RetailerSummary(
             id=account.retailer.id,
             company_name=account.retailer.company_name,
@@ -78,11 +79,12 @@ async def list_requests(
 @router.post("/requests/{request_id}/approve", response_model=AccountRequestOut)
 async def approve_request(
     request_id: uuid.UUID,
+    body: ApproveRequest,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     _: CurrentUser = Depends(require_admin),
 ) -> AccountRequestOut:
-    """Approve a pending account link request."""
+    """Approve a pending account link request. Optionally enable gratis ordering."""
     account = (
         await db.execute(
             select(RetailerDistributor)
@@ -101,6 +103,7 @@ async def approve_request(
 
     account.status = "approved"
     account.rejection_reason = None
+    account.gratis_enabled = body.gratis_enabled
     await db.commit()
     await db.refresh(account)
 

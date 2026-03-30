@@ -85,6 +85,15 @@ class BasketItemAdd(BaseModel):
     preferred_distributor_code: str | None = None
 
 
+class BulkBasketItem(BaseModel):
+    isbn13: str = Field(min_length=13, max_length=13)
+    quantity: int = Field(ge=1, default=1)
+
+
+class BulkAddRequest(BaseModel):
+    items: list[BulkBasketItem] = Field(..., min_length=1, max_length=500)
+
+
 class BasketItemUpdate(BaseModel):
     quantity: int | None = Field(default=None, ge=1)
     preferred_distributor_code: str | None = None
@@ -108,6 +117,13 @@ class BasketOut(BaseModel):
     total_cost_gbp: Decimal | None
     avg_margin_pct: Decimal | None
     items: list[RoutedItemOut]
+
+
+class BulkAddResult(BaseModel):
+    added: list[str]              # ISBNs successfully added
+    already_in_basket: list[str]  # ISBNs already present — quantity topped up
+    failed: list[str]             # ISBNs not found in catalog or DB error
+    basket: BasketOut | None = None
 
 
 # ─── Orders ───────────────────────────────────────────────────────────────────

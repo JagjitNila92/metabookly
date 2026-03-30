@@ -16,6 +16,8 @@ from app.schemas.ordering import (
     BasketItemAdd,
     BasketItemUpdate,
     BasketOut,
+    BulkAddRequest,
+    BulkAddResult,
     OrderOut,
     SubmitBasketRequest,
 )
@@ -163,6 +165,74 @@ async def clear_basket(
         await db.delete(item)
     basket.items.clear()
     await db.commit()
+
+
+@router.post("/bulk-add", response_model=BulkAddResult, status_code=status.HTTP_200_OK)
+async def bulk_add_items(
+    body: BulkAddRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_retailer),
+) -> BulkAddResult:
+    """
+    Add multiple ISBNs to the basket in one call.
+    Increments quantity for ISBNs already in the basket.
+    Returns lists of added, already_in_basket, and failed ISBNs.
+    """
+    retailer = await _get_or_create_retailer(db, current_user)
+    basket = await _get_basket(db, retailer)
+
+    # Build a set of ISBNs already in basket for flagging
+    existing_isbns = {i.isbn13 for i in basket.items}
+
+    # Fetch all requested books in one query
+    requested_isbns = [item.isbn13 for item in body.items]
+    books_in_catalog = {
+        b.isbn13: b
+        for b in (
+            await db.execute(select(Book).where(Book.isbn13.in_(requested_isbns)))
+        ).scalars().all()
+    }
+
+    added: list[str] = []
+    already_in_basket: list[str] = []
+    failed: list[str] = []
+
+    qty_map = {item.isbn13: item.quantity for item in body.items}
+
+    for isbn in requested_isbns:
+        book = books_in_catalog.get(isbn)
+        if not book:
+            failed.append(isbn)
+            continue
+        try:
+            existing = next((i for i in basket.items if i.isbn13 == isbn), None)
+            if existing:
+                existing.quantity += qty_map[isbn]
+                already_in_basket.append(isbn)
+            else:
+                new_item = BasketItem(
+                    basket_id=basket.id,
+                    book_id=book.id,
+                    isbn13=isbn,
+                    quantity=qty_map[isbn],
+                )
+                db.add(new_item)
+                basket.items.append(new_item)
+                added.append(isbn)
+        except Exception:
+            logger.exception("bulk_add: failed to add %s", isbn)
+            failed.append(isbn)
+
+    await db.commit()
+    basket = await _get_basket(db, retailer)
+    basket_out = await build_basket_out(db, basket, retailer)
+
+    return BulkAddResult(
+        added=added,
+        already_in_basket=already_in_basket,
+        failed=failed,
+        basket=basket_out,
+    )
 
 
 @router.get("/route", response_model=BasketOut)
