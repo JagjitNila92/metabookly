@@ -135,6 +135,7 @@ export interface Order {
   id: string
   po_number: string
   status: string
+  order_type: string
   delivery_type: string
   total_lines: number | null
   total_gbp: string | null
@@ -147,6 +148,7 @@ export interface OrderSummary {
   id: string
   po_number: string
   status: string
+  order_type: string
   total_lines: number | null
   total_gbp: string | null
   submitted_at: string | null
@@ -224,6 +226,7 @@ export interface LinkedAccount {
   account_number: string | null
   status: string
   rejection_reason: string | null
+  gratis_enabled: boolean
   created_at: string
 }
 

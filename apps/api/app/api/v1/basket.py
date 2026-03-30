@@ -270,5 +270,6 @@ async def submit_order(
         delivery_address_id=body.delivery_address_id,
         delivery_address=body.delivery_address,
         billing_address_id=body.billing_address_id,
+        order_type=body.order_type,
     )
     return order

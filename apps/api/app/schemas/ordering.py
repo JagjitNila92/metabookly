@@ -3,6 +3,8 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
+from typing import Literal
+
 from pydantic import BaseModel, Field, model_validator
 
 
@@ -162,6 +164,7 @@ class OrderOut(BaseModel):
     id: UUID
     po_number: str
     status: str
+    order_type: str
     delivery_type: str
     total_lines: int | None
     total_gbp: Decimal | None
@@ -177,6 +180,7 @@ class OrderSummaryOut(BaseModel):
     id: UUID
     po_number: str
     status: str
+    order_type: str
     total_lines: int | None
     total_gbp: Decimal | None
     submitted_at: datetime | None
@@ -213,6 +217,7 @@ class SubmitBasketRequest(BaseModel):
     delivery_address_id: UUID | None = None
     delivery_address: AddressIn | None = None       # one-off address (not saved)
     billing_address_id: UUID | None = None
+    order_type: Literal["trade", "gratis", "sample"] = "trade"
 
     @model_validator(mode="after")
     def require_delivery(self) -> "SubmitBasketRequest":

@@ -27,6 +27,7 @@ class LinkedAccountOut(BaseModel):
     account_number: str | None
     status: str  # pending | approved | rejected | withdrawn
     rejection_reason: str | None
+    gratis_enabled: bool = False
     created_at: datetime
 
     model_config = {"from_attributes": True}

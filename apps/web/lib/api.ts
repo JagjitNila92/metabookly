@@ -118,6 +118,7 @@ export const submitBasket = (body: {
   delivery_address_id?: string
   delivery_address?: { contact_name: string; line1: string; line2?: string; city: string; county?: string; postcode: string; country_code?: string }
   billing_address_id?: string
+  order_type?: 'trade' | 'gratis' | 'sample'
 }) => authFetch<Order>('/api/basket/submit', { method: 'POST', body: JSON.stringify(body) })
 
 // ─── Orders ───────────────────────────────────────────────────────────────────

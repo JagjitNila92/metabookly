@@ -6,13 +6,13 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   ShoppingCart, Trash2, Plus, Minus, Package, AlertCircle,
-  ChevronRight, MapPin, X, CheckCircle,
+  ChevronRight, MapPin, X, CheckCircle, Gift,
 } from 'lucide-react'
 import {
   getBasket, updateBasketItem, removeFromBasket, clearBasket,
-  submitBasket, getAddresses,
+  submitBasket, getAddresses, getRetailerProfile,
 } from '@/lib/api'
-import type { BasketResponse, RoutedItem, Address, Order } from '@/lib/types'
+import type { BasketResponse, RoutedItem, Address, Order, RetailerProfile } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 // ─── Status helpers ───────────────────────────────────────────────────────────
@@ -34,12 +34,14 @@ function marginColor(pct: string | null) {
 
 function SubmitModal({
   addresses,
+  hasGratis,
   onSubmit,
   onClose,
   submitting,
 }: {
   addresses: Address[]
-  onSubmit: (deliveryAddressId?: string) => void
+  hasGratis: boolean
+  onSubmit: (deliveryAddressId?: string, orderType?: 'trade' | 'gratis') => void
   onClose: () => void
   submitting: boolean
 }) {
@@ -47,6 +49,7 @@ function SubmitModal({
   const [selected, setSelected] = useState<string | undefined>(
     delivery.find(a => a.is_default)?.id ?? delivery[0]?.id,
   )
+  const [orderType, setOrderType] = useState<'trade' | 'gratis'>('trade')
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
@@ -57,6 +60,42 @@ function SubmitModal({
             <X size={20} />
           </button>
         </div>
+
+        {/* Order type toggle — only shown when retailer has gratis permission */}
+        {hasGratis && (
+          <div className="mb-5">
+            <p className="text-sm text-slate-600 mb-2">Order type:</p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setOrderType('trade')}
+                className={cn(
+                  'flex-1 py-2 rounded-lg text-sm font-medium border transition-colors',
+                  orderType === 'trade'
+                    ? 'bg-amber-500 border-amber-500 text-white'
+                    : 'border-slate-200 text-slate-600 hover:border-slate-300',
+                )}
+              >
+                Trade order
+              </button>
+              <button
+                onClick={() => setOrderType('gratis')}
+                className={cn(
+                  'flex-1 py-2 rounded-lg text-sm font-medium border transition-colors flex items-center justify-center gap-1.5',
+                  orderType === 'gratis'
+                    ? 'bg-violet-600 border-violet-600 text-white'
+                    : 'border-slate-200 text-slate-600 hover:border-slate-300',
+                )}
+              >
+                <Gift size={13} /> Gratis
+              </button>
+            </div>
+            {orderType === 'gratis' && (
+              <p className="text-xs text-violet-700 bg-violet-50 border border-violet-200 rounded-lg px-3 py-2 mt-2">
+                This is a complimentary order — items will be priced at £0.00.
+              </p>
+            )}
+          </div>
+        )}
 
         {delivery.length === 0 ? (
           <div className="text-sm text-slate-600 mb-4">
@@ -111,11 +150,16 @@ function SubmitModal({
             Cancel
           </button>
           <button
-            onClick={() => onSubmit(selected)}
+            onClick={() => onSubmit(selected, orderType)}
             disabled={submitting || delivery.length === 0 || !selected}
-            className="flex-1 px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors"
+            className={cn(
+              'flex-1 px-4 py-2 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors',
+              orderType === 'gratis'
+                ? 'bg-violet-600 hover:bg-violet-700'
+                : 'bg-amber-500 hover:bg-amber-600',
+            )}
           >
-            {submitting ? 'Placing order…' : 'Place order'}
+            {submitting ? 'Placing order…' : orderType === 'gratis' ? 'Place gratis order' : 'Place order'}
           </button>
         </div>
       </div>
@@ -139,7 +183,14 @@ function OrderConfirmation({ order, onDone }: { order: Order; onDone: () => void
       </div>
       <h1 className="text-2xl font-bold text-slate-900 mb-1">Order placed!</h1>
       <p className="text-slate-500 mb-1">PO number: <span className="font-mono font-medium text-slate-700">{order.po_number}</span></p>
-      <p className="text-slate-500 mb-8 text-sm">Status: <span className="font-medium">{order.status}</span></p>
+      <div className="flex items-center justify-center gap-2 mb-8 text-sm text-slate-500">
+        <span>Status: <span className="font-medium">{order.status}</span></span>
+        {order.order_type !== 'trade' && (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 text-xs font-medium">
+            <Gift size={11} /> {order.order_type === 'gratis' ? 'Gratis' : order.order_type}
+          </span>
+        )}
+      </div>
 
       <div className="grid grid-cols-3 gap-4 mb-8">
         {confirmed > 0 && (
@@ -214,16 +265,20 @@ function ItemStatusBadge({ status }: { status: string }) {
 export default function BasketPage() {
   const [basket, setBasket] = useState<BasketResponse | null>(null)
   const [addresses, setAddresses] = useState<Address[]>([])
+  const [profile, setProfile] = useState<RetailerProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showSubmit, setShowSubmit] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [confirmedOrder, setConfirmedOrder] = useState<Order | null>(null)
 
+  const hasGratis = profile?.accounts.some(
+    a => a.status === 'approved' && a.gratis_enabled,
+  ) ?? false
 
   useEffect(() => {
-    Promise.all([getBasket(), getAddresses()])
-      .then(([b, a]) => { setBasket(b); setAddresses(a) })
+    Promise.all([getBasket(), getAddresses(), getRetailerProfile()])
+      .then(([b, a, p]) => { setBasket(b); setAddresses(a); setProfile(p) })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
   }, [])
@@ -263,10 +318,13 @@ export default function BasketPage() {
     }
   }
 
-  async function handleSubmit(deliveryAddressId?: string) {
+  async function handleSubmit(deliveryAddressId?: string, orderType: 'trade' | 'gratis' = 'trade') {
     setSubmitting(true)
     try {
-      const order = await submitBasket({ delivery_address_id: deliveryAddressId })
+      const order = await submitBasket({
+        delivery_address_id: deliveryAddressId,
+        order_type: orderType,
+      })
       setConfirmedOrder(order)
       setShowSubmit(false)
       window.dispatchEvent(new Event('basketUpdated'))
@@ -332,6 +390,7 @@ export default function BasketPage() {
       {showSubmit && (
         <SubmitModal
           addresses={addresses}
+          hasGratis={hasGratis}
           onSubmit={handleSubmit}
           onClose={() => setShowSubmit(false)}
           submitting={submitting}

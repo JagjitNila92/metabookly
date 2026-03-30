@@ -193,6 +193,7 @@ async def submit_basket(
     delivery_address_id: uuid.UUID | None,
     delivery_address: AddressIn | None,
     billing_address_id: uuid.UUID | None,
+    order_type: str = "trade",
 ) -> Order:
     """Submit the basket: create Order + OrderLines, transmit to connectors, clear basket."""
     if not basket.items:
@@ -206,6 +207,15 @@ async def submit_basket(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No active distributor accounts — link and get approved before ordering",
         )
+
+    # Validate gratis/sample permission — retailer must have gratis_enabled on at least one account
+    if order_type in ("gratis", "sample"):
+        from fastapi import HTTPException, status
+        if not any(a.gratis_enabled for a in accounts):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Gratis ordering is not enabled for your account — contact your distributor",
+            )
 
     # Resolve delivery address snapshot
     snapshot: dict | None = None
@@ -236,6 +246,7 @@ async def submit_basket(
         retailer_id=retailer.id,
         po_number=po_number,
         status="pending_transmission",
+        order_type=order_type,
         billing_address_id=billing_address_id,
         delivery_address_id=delivery_address_id,
         delivery_address_snapshot=snapshot,
@@ -277,6 +288,8 @@ async def submit_basket(
         subtotal = Decimal("0")
         for item_seq, (item, trade_price, rrp) in enumerate(items, start=1):
             ref = f"{str(line.id)[:8]}-{item_seq:03d}"
+            # Gratis/sample orders are free — zero out trade price
+            effective_price = Decimal("0") if order_type in ("gratis", "sample") else trade_price
             li = OrderLineItem(
                 order_line_id=line.id,
                 book_id=item.book_id,
@@ -284,22 +297,24 @@ async def submit_basket(
                 retailer_line_ref=ref,
                 quantity_ordered=item.quantity,
                 status="pending",
-                trade_price_gbp=trade_price,
+                trade_price_gbp=effective_price,
                 rrp_gbp=rrp,
             )
             db.add(li)
-            if trade_price:
-                subtotal += trade_price * item.quantity
+            subtotal += (effective_price or Decimal("0")) * item.quantity
 
-        line.subtotal_gbp = subtotal if subtotal else None
+        line.subtotal_gbp = subtotal
 
     order.total_lines = len(groups)
-    order.total_gbp = sum(
-        (g[1] or Decimal("0")) * g[0].quantity
-        for items_list in groups.values()
-        for g in items_list
-        if g[1]
-    ) or None
+    if order_type in ("gratis", "sample"):
+        order.total_gbp = Decimal("0")
+    else:
+        computed = sum(
+            (g[1] or Decimal("0")) * g[0].quantity
+            for items_list in groups.values()
+            for g in items_list
+        )
+        order.total_gbp = computed or None
 
     # Transmit to each connector (mock: instant response)
     await _transmit_order(db, order, groups, retailer, accounts)
