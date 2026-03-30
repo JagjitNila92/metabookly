@@ -53,7 +53,6 @@ export const authOptions: AuthOptions = {
           }
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : String(err)
-          // NotAuthorizedException = wrong password; UserNotFoundException = unknown user
           console.warn('Cognito auth failed:', msg)
           return null
         }
