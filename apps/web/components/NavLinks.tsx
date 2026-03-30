@@ -54,28 +54,28 @@ function NavLink({ href, children }: { href: string; children: React.ReactNode }
 
 // ── Admin switcher ────────────────────────────────────────────────────────────
 
-type PortalView = 'retailer' | 'publisher'
+type PortalView = 'retailer' | 'publisher' | 'distributor'
 
 function AdminSwitcher({ view, onChange }: { view: PortalView; onChange: (v: PortalView) => void }) {
+  const tabs: { value: PortalView; label: string }[] = [
+    { value: 'retailer',    label: 'Retailer' },
+    { value: 'publisher',   label: 'Publisher' },
+    { value: 'distributor', label: 'Distributor' },
+  ]
   return (
     <div className="flex items-center gap-1 bg-slate-100 rounded-full px-1 py-0.5 text-xs">
       <ArrowLeftRight size={11} className="text-slate-400 mx-1" />
-      <button
-        onClick={() => onChange('retailer')}
-        className={`px-2.5 py-0.5 rounded-full transition-colors ${
-          view === 'retailer' ? 'bg-white shadow-sm text-slate-800 font-medium' : 'text-slate-500 hover:text-slate-700'
-        }`}
-      >
-        Retailer
-      </button>
-      <button
-        onClick={() => onChange('publisher')}
-        className={`px-2.5 py-0.5 rounded-full transition-colors ${
-          view === 'publisher' ? 'bg-white shadow-sm text-slate-800 font-medium' : 'text-slate-500 hover:text-slate-700'
-        }`}
-      >
-        Publisher
-      </button>
+      {tabs.map(t => (
+        <button
+          key={t.value}
+          onClick={() => onChange(t.value)}
+          className={`px-2.5 py-0.5 rounded-full transition-colors ${
+            view === t.value ? 'bg-white shadow-sm text-slate-800 font-medium' : 'text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          {t.label}
+        </button>
+      ))}
     </div>
   )
 }
@@ -94,6 +94,7 @@ export function NavLinks() {
   // Admin starts on whichever portal their current path suggests
   const inferView = (): PortalView => {
     if (pathname.startsWith('/publisher') || pathname.startsWith('/portal')) return 'publisher'
+    if (pathname.startsWith('/distributor')) return 'distributor'
     return 'retailer'
   }
   const [adminView, setAdminView] = useState<PortalView>(inferView)
@@ -101,12 +102,15 @@ export function NavLinks() {
   // When admin switches view, navigate to the right dashboard
   const handleSwitch = (v: PortalView) => {
     setAdminView(v)
-    window.location.href = v === 'retailer' ? '/dashboard' : '/publisher/dashboard'
+    if (v === 'retailer') window.location.href = '/dashboard'
+    else if (v === 'publisher') window.location.href = '/publisher/dashboard'
+    else window.location.href = '/distributor/orders'
   }
 
   // Determine which nav to show
   const showRetailerNav = isRetailer && (!isAdmin || adminView === 'retailer')
   const showPublisherNav = isPublisher && (!isAdmin || adminView === 'publisher')
+  const showDistributorNav = isAdmin && adminView === 'distributor'
 
   return (
     <nav className="flex items-center gap-4 text-sm text-slate-600">
@@ -136,11 +140,12 @@ export function NavLinks() {
         </>
       )}
 
-      {/* Admin-only distributor tools */}
-      {isAdmin && adminView === 'retailer' && (
+      {/* Distributor nav (admin only, distributor view) */}
+      {showDistributorNav && (
         <>
-          <NavLink href="/distributor/requests">Requests</NavLink>
+          <NavLink href="/distributor/dashboard">Dashboard</NavLink>
           <NavLink href="/distributor/orders">Orders</NavLink>
+          <NavLink href="/distributor/requests">Requests</NavLink>
         </>
       )}
 

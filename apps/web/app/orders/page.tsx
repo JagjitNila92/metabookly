@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { ClipboardList, ChevronRight, AlertCircle, Package } from 'lucide-react'
+import { ClipboardList, ChevronRight, AlertCircle, Package, Gift } from 'lucide-react'
 import { getOrders } from '@/lib/api'
 import type { OrderSummary, OrdersPage } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -122,9 +122,16 @@ export default function OrdersPage() {
               {data.orders.map((order: OrderSummary) => (
                 <tr key={order.id} className="hover:bg-slate-50 transition-colors">
                   <td className="px-4 py-3">
-                    <Link href={`/orders/${order.id}`} className="font-mono text-sm font-medium text-slate-900 hover:text-amber-600">
-                      {order.po_number}
-                    </Link>
+                    <div className="flex items-center gap-2">
+                      <Link href={`/orders/${order.id}`} className="font-mono text-sm font-medium text-slate-900 hover:text-amber-600">
+                        {order.po_number}
+                      </Link>
+                      {order.order_type !== 'trade' && (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700 text-[10px] font-medium">
+                          <Gift size={9} /> {order.order_type}
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-3"><StatusBadge status={order.status} /></td>
                   <td className="px-4 py-3 text-slate-500 hidden sm:table-cell">{order.total_lines ?? '—'}</td>
