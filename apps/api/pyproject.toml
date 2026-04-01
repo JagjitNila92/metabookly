@@ -54,6 +54,10 @@ testpaths = ["tests"]
 #   TEST_DATABASE_URL=postgresql+asyncpg://metabookly:metabookly@localhost:5432/metabookly_test pytest
 # CI sets this automatically via the workflow env vars.
 
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"
