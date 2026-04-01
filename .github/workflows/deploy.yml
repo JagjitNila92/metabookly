@@ -68,6 +68,7 @@ jobs:
         run: pytest --tb=short -q
         env:
           DATABASE_URL: postgresql+asyncpg://metabookly:metabookly@localhost:5432/metabookly_test
+          TEST_DATABASE_URL: postgresql+asyncpg://metabookly:metabookly@localhost:5432/metabookly_test
 
       - uses: actions/setup-node@v4
         with:
@@ -123,6 +124,7 @@ jobs:
         run: pytest --tb=short -q
         env:
           DATABASE_URL: postgresql+asyncpg://metabookly:metabookly@localhost:5432/metabookly_test
+          TEST_DATABASE_URL: postgresql+asyncpg://metabookly:metabookly@localhost:5432/metabookly_test
 
   # ── Build & push image ──────────────────────────────────────────────────────
   build:
