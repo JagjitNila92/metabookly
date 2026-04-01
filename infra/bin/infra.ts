@@ -31,18 +31,21 @@ const databaseStack = new DatabaseStack(app, 'MetabooklyDatabase', {
 // 4. Auth — Cognito User Pool for retailers and publishers
 const authStack = new AuthStack(app, 'MetabooklyAuth', { env });
 
-// 5. API — ECR repository, App Runner service (no ALB — built-in ingress + HTTPS)
+// 5. API — App Runner service (no ALB — built-in ingress + HTTPS)
+//    ECR repo lives in MetabooklyStorage so it can be created before any image exists.
 const apiStack = new ApiStack(app, 'MetabooklyApi', {
   env,
   vpc: networkStack.vpc,
   appSecurityGroup: networkStack.appSecurityGroup,
   dbSecret: databaseStack.secret,
+  ecrRepository: storageStack.apiRepository,
 });
 
 // Stack dependencies
 databaseStack.addDependency(networkStack);
 apiStack.addDependency(networkStack);
 apiStack.addDependency(databaseStack);
+apiStack.addDependency(storageStack);
 
 cdk.Tags.of(app).add('Project', 'Metabookly');
 cdk.Tags.of(app).add('Environment', 'mvp');

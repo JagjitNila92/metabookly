@@ -11,34 +11,15 @@ interface ApiStackProps extends cdk.StackProps {
   vpc: ec2.Vpc;
   appSecurityGroup: ec2.SecurityGroup;
   dbSecret: secretsmanager.ISecret;
+  ecrRepository: ecr.Repository;
 }
 
 export class ApiStack extends cdk.Stack {
-  public readonly ecrRepository: ecr.Repository;
   public readonly appRunnerServiceArn: string;
   public readonly appRunnerServiceUrl: string;
 
   constructor(scope: Construct, id: string, props: ApiStackProps) {
     super(scope, id, props);
-
-    // ── ECR repository ──────────────────────────────────────────────────────
-    this.ecrRepository = new ecr.Repository(this, 'ApiRepository', {
-      repositoryName: 'metabookly-api',
-      lifecycleRules: [
-        {
-          description: 'Keep last 10 tagged images',
-          maxImageCount: 10,
-          tagStatus: ecr.TagStatus.TAGGED,
-          tagPrefixList: ['sha-'],
-        },
-        {
-          description: 'Remove untagged images after 1 day',
-          maxImageAge: cdk.Duration.days(1),
-          tagStatus: ecr.TagStatus.UNTAGGED,
-        },
-      ],
-      removalPolicy: cdk.RemovalPolicy.RETAIN,
-    });
 
     // ── CloudWatch log group ─────────────────────────────────────────────────
     const logGroup = new logs.LogGroup(this, 'ApiLogGroup', {
@@ -111,7 +92,7 @@ export class ApiStack extends cdk.Stack {
         autoDeploymentsEnabled: false,
         imageRepository: {
           imageRepositoryType: 'ECR',
-          imageIdentifier: `${this.ecrRepository.repositoryUri}:latest`,
+          imageIdentifier: `${props.ecrRepository.repositoryUri}:latest`,
           imageConfiguration: {
             port: '8000',
             runtimeEnvironmentVariables: [
@@ -143,7 +124,7 @@ export class ApiStack extends cdk.Stack {
       healthCheckConfiguration: {
         protocol: 'HTTP',
         path: '/health',
-        interval: 30,
+        interval: 20,  // App Runner max is 20s
         timeout: 5,
         healthyThreshold: 2,
         unhealthyThreshold: 3,
@@ -171,11 +152,6 @@ export class ApiStack extends cdk.Stack {
     }));
 
     // ── Outputs ──────────────────────────────────────────────────────────────
-    new cdk.CfnOutput(this, 'EcrRepositoryUri', {
-      value: this.ecrRepository.repositoryUri,
-      exportName: 'MetabooklyEcrRepositoryUri',
-    });
-
     new cdk.CfnOutput(this, 'AppRunnerServiceArn', {
       value: service.attrServiceArn,
       exportName: 'MetabooklyAppRunnerServiceArn',

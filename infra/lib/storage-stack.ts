@@ -1,10 +1,12 @@
 import * as cdk from 'aws-cdk-lib';
+import * as ecr from 'aws-cdk-lib/aws-ecr';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import { Construct } from 'constructs';
 
 export class StorageStack extends cdk.Stack {
   public readonly onixBucket: s3.Bucket;
   public readonly assetsBucket: s3.Bucket;
+  public readonly apiRepository: ecr.Repository;
 
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
@@ -48,6 +50,31 @@ export class StorageStack extends cdk.Stack {
         },
       ],
       removalPolicy: cdk.RemovalPolicy.RETAIN,
+    });
+
+    // ECR repository for the API Docker image — lives here so it can be
+    // created independently of the App Runner service (which needs an image first).
+    this.apiRepository = new ecr.Repository(this, 'ApiRepository', {
+      repositoryName: 'metabookly-api',
+      lifecycleRules: [
+        {
+          description: 'Keep last 10 tagged images',
+          maxImageCount: 10,
+          tagStatus: ecr.TagStatus.TAGGED,
+          tagPrefixList: ['sha-'],
+        },
+        {
+          description: 'Remove untagged images after 1 day',
+          maxImageAge: cdk.Duration.days(1),
+          tagStatus: ecr.TagStatus.UNTAGGED,
+        },
+      ],
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    });
+
+    new cdk.CfnOutput(this, 'EcrRepositoryUri', {
+      value: this.apiRepository.repositoryUri,
+      exportName: 'MetabooklyEcrRepositoryUri',
     });
 
     new cdk.CfnOutput(this, 'OnixBucketName', {
