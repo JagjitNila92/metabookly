@@ -10,9 +10,7 @@ env:
   AWS_REGION: eu-west-2
   AWS_ACCOUNT_ID: "562675430068"
   ECR_REPOSITORY: metabookly-api
-  ECS_CLUSTER: metabookly
-  ECS_SERVICE: metabookly-api
-  ECS_TASK_FAMILY: metabookly-api
+  APP_RUNNER_SERVICE_NAME: metabookly-api
 
 jobs:
 
@@ -159,11 +157,13 @@ jobs:
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
           echo "image_uri=$IMAGE_URI" >> $GITHUB_OUTPUT
 
-  # ── Deploy infrastructure ───────────────────────────────────────────────────
+  # ── Deploy infrastructure (CDK) ─────────────────────────────────────────────
+  # Runs after build so the :latest image exists in ECR before App Runner
+  # service is created/updated (avoids a failed health check on first deploy).
   infrastructure:
     name: Deploy Infrastructure (CDK)
     runs-on: ubuntu-latest
-    needs: [test]
+    needs: [build]
     steps:
       - uses: actions/checkout@v4
 
@@ -188,14 +188,12 @@ jobs:
         working-directory: infra
         run: npx cdk deploy --all --require-approval never
 
-  # ── Deploy API to ECS ───────────────────────────────────────────────────────
+  # ── Deploy to App Runner ────────────────────────────────────────────────────
   deploy:
-    name: Deploy API to ECS
+    name: Deploy to App Runner
     runs-on: ubuntu-latest
     needs: [build, infrastructure]
     steps:
-      - uses: actions/checkout@v4
-
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -203,26 +201,42 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Download current task definition
+      - name: Trigger App Runner deployment and wait
         run: |
-          aws ecs describe-task-definition \
-            --task-definition $ECS_TASK_FAMILY \
-            --query taskDefinition \
-            > task-definition.json
+          SERVICE_ARN=$(aws apprunner list-services \
+            --query "ServiceSummaryList[?ServiceName=='$APP_RUNNER_SERVICE_NAME'].ServiceArn" \
+            --output text)
 
-      - name: Update task definition image
-        id: task-def
-        uses: aws-actions/amazon-ecs-render-task-definition@v1
-        with:
-          task-definition: task-definition.json
-          container-name: api
-          image: ${{ needs.build.outputs.image_uri }}
+          if [ -z "$SERVICE_ARN" ]; then
+            echo "Error: App Runner service '$APP_RUNNER_SERVICE_NAME' not found"
+            exit 1
+          fi
 
-      - name: Deploy to ECS
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
-        with:
-          task-definition: ${{ steps.task-def.outputs.task-definition }}
-          service: ${{ env.ECS_SERVICE }}
-          cluster: ${{ env.ECS_CLUSTER }}
-          wait-for-service-stability: true
-          wait-for-minutes: 5
+          echo "Deploying to: $SERVICE_ARN"
+
+          OPERATION_ID=$(aws apprunner start-deployment \
+            --service-arn "$SERVICE_ARN" \
+            --query "OperationId" \
+            --output text)
+
+          echo "Operation ID: $OPERATION_ID"
+
+          # Poll for completion (max 10 minutes, 30s intervals)
+          for i in $(seq 1 20); do
+            STATUS=$(aws apprunner list-operations \
+              --service-arn "$SERVICE_ARN" \
+              --query "OperationSummaryList[?Id=='$OPERATION_ID'].Status" \
+              --output text)
+            echo "[$i/20] Status: $STATUS"
+            if [ "$STATUS" = "SUCCEEDED" ]; then
+              echo "Deployment succeeded"
+              exit 0
+            elif [[ "$STATUS" == "FAILED" || "$STATUS" == "ROLLBACK_SUCCEEDED" || "$STATUS" == "ROLLBACK_FAILED" ]]; then
+              echo "Deployment failed with status: $STATUS"
+              exit 1
+            fi
+            sleep 30
+          done
+
+          echo "Timed out waiting for deployment to complete"
+          exit 1

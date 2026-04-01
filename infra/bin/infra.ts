@@ -31,7 +31,7 @@ const databaseStack = new DatabaseStack(app, 'MetabooklyDatabase', {
 // 4. Auth — Cognito User Pool for retailers and publishers
 const authStack = new AuthStack(app, 'MetabooklyAuth', { env });
 
-// 5. API — ECR repository, ECS Fargate cluster + service, ALB
+// 5. API — ECR repository, App Runner service (no ALB — built-in ingress + HTTPS)
 const apiStack = new ApiStack(app, 'MetabooklyApi', {
   env,
   vpc: networkStack.vpc,
