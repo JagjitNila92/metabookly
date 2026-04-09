@@ -55,13 +55,14 @@ function NavLink({ href, children }: { href: string; children: React.ReactNode }
 
 // ── Admin switcher ────────────────────────────────────────────────────────────
 
-type PortalView = 'retailer' | 'publisher' | 'distributor'
+type PortalView = 'retailer' | 'publisher' | 'distributor' | 'admin'
 
 function AdminSwitcher({ view, onChange }: { view: PortalView; onChange: (v: PortalView) => void }) {
   const tabs: { value: PortalView; label: string }[] = [
     { value: 'retailer',    label: 'Retailer' },
     { value: 'publisher',   label: 'Publisher' },
     { value: 'distributor', label: 'Distributor' },
+    { value: 'admin',       label: 'Admin' },
   ]
   return (
     <div className="flex items-center gap-1 bg-slate-100 rounded-full px-1 py-0.5 text-xs">
@@ -94,6 +95,7 @@ export function NavLinks() {
 
   // Admin starts on whichever portal their current path suggests
   const inferView = (): PortalView => {
+    if (pathname.startsWith('/admin')) return 'admin'
     if (pathname.startsWith('/publisher') || pathname.startsWith('/portal')) return 'publisher'
     if (pathname.startsWith('/distributor')) return 'distributor'
     return 'retailer'
@@ -105,13 +107,15 @@ export function NavLinks() {
     setAdminView(v)
     if (v === 'retailer') window.location.href = '/dashboard'
     else if (v === 'publisher') window.location.href = '/publisher/dashboard'
-    else window.location.href = '/distributor/orders'
+    else if (v === 'distributor') window.location.href = '/distributor/orders'
+    else window.location.href = '/admin/dashboard'
   }
 
   // Determine which nav to show
-  const showRetailerNav = isRetailer && (!isAdmin || adminView === 'retailer')
-  const showPublisherNav = isPublisher && (!isAdmin || adminView === 'publisher')
+  const showRetailerNav    = isRetailer && (!isAdmin || adminView === 'retailer')
+  const showPublisherNav   = isPublisher && (!isAdmin || adminView === 'publisher')
   const showDistributorNav = isAdmin && adminView === 'distributor'
+  const showAdminNav       = isAdmin && adminView === 'admin'
 
   return (
     <nav className="flex items-center gap-4 text-sm text-slate-600">
@@ -150,6 +154,15 @@ export function NavLinks() {
           <NavLink href="/distributor/dashboard">Dashboard</NavLink>
           <NavLink href="/distributor/orders">Orders</NavLink>
           <NavLink href="/distributor/requests">Requests</NavLink>
+        </>
+      )}
+
+      {/* Admin nav */}
+      {showAdminNav && (
+        <>
+          <NavLink href="/admin/dashboard">Overview</NavLink>
+          <NavLink href="/admin/retailers">Retailers</NavLink>
+          <NavLink href="/admin/flags">Flags</NavLink>
         </>
       )}
 

@@ -5,6 +5,8 @@ All routes require the 'admins' Cognito group.
 
 Endpoints
 ─────────
+GET    /admin/stats                                  Platform-wide stats
+GET    /admin/retailers                              Paginated retailer list
 GET    /admin/flags/global                           List all global feature flags
 PATCH  /admin/flags/global/{flag_name}               Toggle a global flag
 GET    /admin/flags/{account_type}/{account_id}      List per-account flag overrides
@@ -14,17 +16,19 @@ DELETE /admin/flags/{account_type}/{account_id}/{flag_name}   Remove override (f
 PATCH  /admin/retailers/{retailer_id}/plan           Change a retailer's plan tier
 """
 import uuid
-from datetime import datetime, UTC
+from datetime import datetime, UTC, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, func, case
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db, require_admin
 from app.auth.models import CurrentUser
 from app.models.feature_flags import GlobalFeatureFlag, AccountFeatureFlag
 from app.models.retailer import Retailer
+from app.models.ordering import Order
+from app.models.book import Book
 from app.services.feature_flag_service import FeatureFlagService
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -80,6 +84,124 @@ class RetailerPlanOut(BaseModel):
     plan_expires_at: datetime | None
 
     model_config = {"from_attributes": True}
+
+
+class RetailerListItem(BaseModel):
+    id: uuid.UUID
+    company_name: str
+    email: str
+    contact_name: str | None
+    plan: str
+    extra_seats: int
+    active: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class RetailerListOut(BaseModel):
+    items: list[RetailerListItem]
+    total: int
+    page: int
+    page_size: int
+
+
+class PlanCounts(BaseModel):
+    free: int
+    starter_api: int
+    intelligence: int
+    enterprise: int
+
+
+class PlatformStats(BaseModel):
+    total_retailers: int
+    retailers_by_plan: PlanCounts
+    new_retailers_7d: int
+    total_titles: int
+    total_orders: int
+
+
+# ── Platform stats ───────────────────────────────────────────────────────────
+
+@router.get("/stats", response_model=PlatformStats)
+async def get_platform_stats(
+    db: AsyncSession = Depends(get_db),
+    _: CurrentUser = Depends(require_admin),
+) -> PlatformStats:
+    """Platform-wide stats for the admin dashboard overview."""
+    cutoff_7d = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=7)
+
+    # Retailer counts
+    total_retailers = (await db.execute(select(func.count()).select_from(Retailer))).scalar_one()
+    new_7d = (
+        await db.execute(select(func.count()).select_from(Retailer).where(Retailer.created_at >= cutoff_7d))
+    ).scalar_one()
+
+    # Plan breakdown
+    plan_rows = (
+        await db.execute(
+            select(Retailer.plan, func.count().label("n"))
+            .group_by(Retailer.plan)
+        )
+    ).all()
+    plan_map: dict[str, int] = {row.plan: row.n for row in plan_rows}
+
+    # Catalog + orders
+    total_titles = (await db.execute(select(func.count()).select_from(Book))).scalar_one()
+    total_orders = (await db.execute(select(func.count()).select_from(Order))).scalar_one()
+
+    return PlatformStats(
+        total_retailers=total_retailers,
+        retailers_by_plan=PlanCounts(
+            free=plan_map.get("free", 0),
+            starter_api=plan_map.get("starter_api", 0),
+            intelligence=plan_map.get("intelligence", 0),
+            enterprise=plan_map.get("enterprise", 0),
+        ),
+        new_retailers_7d=new_7d,
+        total_titles=total_titles,
+        total_orders=total_orders,
+    )
+
+
+# ── Retailer list ─────────────────────────────────────────────────────────────
+
+@router.get("/retailers", response_model=RetailerListOut)
+async def list_retailers(
+    db: AsyncSession = Depends(get_db),
+    _: CurrentUser = Depends(require_admin),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=100),
+    search: str | None = Query(None),
+    plan: str | None = Query(None),
+) -> RetailerListOut:
+    """Paginated, searchable list of all retailers."""
+    stmt = select(Retailer).order_by(Retailer.created_at.desc())
+    count_stmt = select(func.count()).select_from(Retailer)
+
+    if search:
+        like = f"%{search.lower()}%"
+        stmt = stmt.where(
+            func.lower(Retailer.company_name).like(like) | func.lower(Retailer.email).like(like)
+        )
+        count_stmt = count_stmt.where(
+            func.lower(Retailer.company_name).like(like) | func.lower(Retailer.email).like(like)
+        )
+
+    if plan:
+        stmt = stmt.where(Retailer.plan == plan)
+        count_stmt = count_stmt.where(Retailer.plan == plan)
+
+    total = (await db.execute(count_stmt)).scalar_one()
+    offset = (page - 1) * page_size
+    rows = (await db.execute(stmt.offset(offset).limit(page_size))).scalars().all()
+
+    return RetailerListOut(
+        items=[RetailerListItem.model_validate(r) for r in rows],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
 
 
 # ── Public flag read (no auth) ────────────────────────────────────────────────

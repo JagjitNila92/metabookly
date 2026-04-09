@@ -42,6 +42,13 @@ export default withAuth(
       }
     }
 
+    // Admin-only routes
+    if (pathname.startsWith('/admin')) {
+      if (!isAdmin) {
+        return NextResponse.redirect(new URL('/login', req.url))
+      }
+    }
+
     return NextResponse.next()
   },
   {
@@ -69,6 +76,8 @@ export const config = {
     '/publisher/:path*',
     '/portal/:path*',
     '/distributor/:path*',
+    '/admin/:path*',
+    '/admin',
     '/auth/redirect',
   ],
 }
