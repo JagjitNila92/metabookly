@@ -15,21 +15,45 @@ DELETE /admin/flags/{account_type}/{account_id}/{flag_name}   Remove override (f
 
 PATCH  /admin/retailers/{retailer_id}/plan           Change a retailer's plan tier
 """
+import logging
+import secrets
+import string
 import uuid
 from datetime import datetime, UTC, timedelta
 
+import boto3
+from botocore.exceptions import ClientError
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import select, func, case
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db, require_admin
 from app.auth.models import CurrentUser
+from app.config import get_settings
 from app.models.feature_flags import GlobalFeatureFlag, AccountFeatureFlag
 from app.models.retailer import Retailer
 from app.models.ordering import Order
 from app.models.book import Book
+from app.models.portal import FeedSource
 from app.services.feature_flag_service import FeatureFlagService
+from app.services.email_service import send_publisher_invite_email
+
+logger = logging.getLogger(__name__)
+
+
+def _generate_temp_password() -> str:
+    """Generate a 16-char random password meeting Cognito complexity requirements."""
+    alphabet = string.ascii_letters + string.digits + "!@#$%^"
+    while True:
+        pwd = "".join(secrets.choice(alphabet) for _ in range(16))
+        if (
+            any(c.isupper() for c in pwd)
+            and any(c.islower() for c in pwd)
+            and any(c.isdigit() for c in pwd)
+            and any(c in "!@#$%^" for c in pwd)
+        ):
+            return pwd
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -314,6 +338,154 @@ async def delete_account_flag(
     if not deleted:
         raise HTTPException(404, "Override not found")
     await db.commit()
+
+
+# ── Publisher management ──────────────────────────────────────────────────────
+
+class PublisherCreateRequest(BaseModel):
+    company_name: str
+    contact_email: str
+    contact_name: str
+    distributor_code: str | None = None
+    source_type: str = "publisher"   # publisher | aggregator | distributor
+
+
+class PublisherOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    contact_email: str | None
+    source_type: str
+    distributor_code: str | None
+    managed_by: str
+    active: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class PublisherCreateOut(BaseModel):
+    feed_source: PublisherOut
+    temp_password: str     # shown once in the UI; also sent via email
+
+
+@router.get("/publishers", response_model=list[PublisherOut])
+async def list_publishers(
+    db: AsyncSession = Depends(get_db),
+    _: CurrentUser = Depends(require_admin),
+) -> list[PublisherOut]:
+    """List all publisher feed sources."""
+    rows = (
+        await db.execute(
+            select(FeedSource)
+            .where(FeedSource.source_type.in_(["publisher", "aggregator"]))
+            .order_by(FeedSource.created_at.desc())
+        )
+    ).scalars().all()
+    return [PublisherOut.model_validate(r) for r in rows]
+
+
+@router.post("/publishers", response_model=PublisherCreateOut, status_code=201)
+async def create_publisher(
+    body: PublisherCreateRequest,
+    db: AsyncSession = Depends(get_db),
+    _: CurrentUser = Depends(require_admin),
+) -> PublisherCreateOut:
+    """
+    Create a publisher portal account in one step:
+    1. Cognito user created and added to 'publishers' group
+    2. FeedSource row created and linked to their Cognito sub
+    3. Welcome email sent with temporary password
+
+    The temporary password is returned in this response (shown once) and emailed.
+    """
+    if body.source_type not in ("publisher", "aggregator", "distributor"):
+        raise HTTPException(400, "source_type must be publisher | aggregator | distributor")
+
+    settings = get_settings()
+    cognito = boto3.client("cognito-idp", region_name=settings.aws_region)
+
+    # 1. Check email not already used
+    existing = (
+        await db.execute(select(FeedSource).where(FeedSource.contact_email == body.contact_email))
+    ).scalar_one_or_none()
+    if existing:
+        raise HTTPException(409, "A publisher account with this email already exists.")
+
+    # 2. Create Cognito user
+    temp_password = _generate_temp_password()
+    try:
+        resp = cognito.admin_create_user(
+            UserPoolId=settings.cognito_user_pool_id,
+            Username=body.contact_email,
+            UserAttributes=[
+                {"Name": "email", "Value": body.contact_email},
+                {"Name": "email_verified", "Value": "true"},
+                {"Name": "name", "Value": body.contact_name},
+            ],
+            MessageAction="SUPPRESS",
+        )
+        cognito_sub = next(
+            a["Value"] for a in resp["User"]["Attributes"] if a["Name"] == "sub"
+        )
+    except ClientError as e:
+        code = e.response["Error"]["Code"]
+        if code == "UsernameExistsException":
+            raise HTTPException(409, "A Cognito account with this email already exists.")
+        logger.error("Cognito admin_create_user failed: %s", e)
+        raise HTTPException(500, "Could not create Cognito account. Please try again.")
+
+    # 3. Set permanent password
+    try:
+        cognito.admin_set_user_password(
+            UserPoolId=settings.cognito_user_pool_id,
+            Username=body.contact_email,
+            Password=temp_password,
+            Permanent=True,
+        )
+    except ClientError as e:
+        cognito.admin_delete_user(
+            UserPoolId=settings.cognito_user_pool_id, Username=body.contact_email
+        )
+        logger.error("admin_set_user_password failed: %s", e)
+        raise HTTPException(500, "Could not set password. Please try again.")
+
+    # 4. Add to publishers group
+    cognito.admin_add_user_to_group(
+        UserPoolId=settings.cognito_user_pool_id,
+        Username=body.contact_email,
+        GroupName="publishers",
+    )
+
+    # 5. Create FeedSource
+    priority = 30 if body.source_type == "publisher" else 10   # publisher > aggregator
+    source = FeedSource(
+        name=body.company_name,
+        source_type=body.source_type,
+        priority=priority,
+        cognito_sub=cognito_sub,
+        contact_email=body.contact_email,
+        distributor_code=body.distributor_code,
+        managed_by="publisher",
+    )
+    db.add(source)
+    await db.commit()
+    await db.refresh(source)
+
+    # 6. Send welcome email (fire-and-forget)
+    import asyncio
+    asyncio.create_task(
+        send_publisher_invite_email(
+            publisher_email=body.contact_email,
+            contact_name=body.contact_name,
+            company_name=body.company_name,
+            temp_password=temp_password,
+        )
+    )
+
+    return PublisherCreateOut(
+        feed_source=PublisherOut.model_validate(source),
+        temp_password=temp_password,
+    )
 
 
 # ── Retailer plan management ──────────────────────────────────────────────────

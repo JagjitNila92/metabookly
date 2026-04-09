@@ -162,6 +162,7 @@ export function NavLinks() {
         <>
           <NavLink href="/admin/dashboard">Overview</NavLink>
           <NavLink href="/admin/retailers">Retailers</NavLink>
+          <NavLink href="/admin/publishers">Publishers</NavLink>
           <NavLink href="/admin/flags">Flags</NavLink>
         </>
       )}

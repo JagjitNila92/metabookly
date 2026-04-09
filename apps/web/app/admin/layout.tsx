@@ -1,10 +1,11 @@
 import Link from 'next/link'
-import { LayoutDashboard, Users, ToggleLeft } from 'lucide-react'
+import { LayoutDashboard, Users, ToggleLeft, Building2 } from 'lucide-react'
 
 const NAV = [
-  { href: '/admin/dashboard', label: 'Overview',       icon: LayoutDashboard },
-  { href: '/admin/retailers', label: 'Retailers',       icon: Users           },
-  { href: '/admin/flags',     label: 'Feature Flags',   icon: ToggleLeft      },
+  { href: '/admin/dashboard',  label: 'Overview',      icon: LayoutDashboard },
+  { href: '/admin/retailers',  label: 'Retailers',      icon: Users           },
+  { href: '/admin/publishers', label: 'Publishers',     icon: Building2       },
+  { href: '/admin/flags',      label: 'Feature Flags',  icon: ToggleLeft      },
 ]
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
