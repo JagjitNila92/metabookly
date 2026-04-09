@@ -2,7 +2,7 @@
 
 import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Settings, User, MapPin, Bell, Plus, Pencil, Trash2, Check, AlertCircle, X } from 'lucide-react'
+import { Settings, User, MapPin, Bell, CreditCard, Plus, Pencil, Trash2, Check, AlertCircle, X, CheckCircle2, Minus, Mail } from 'lucide-react'
 import {
   getRetailerProfile, updateRetailerProfile,
   getSettings, updateSettings,
@@ -14,9 +14,10 @@ import { cn } from '@/lib/utils'
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
 
 const TABS = [
-  { id: 'profile',       label: 'Profile',       icon: User },
-  { id: 'addresses',     label: 'Addresses',     icon: MapPin },
-  { id: 'notifications', label: 'Notifications', icon: Bell },
+  { id: 'profile',       label: 'Profile',       icon: User       },
+  { id: 'addresses',     label: 'Addresses',     icon: MapPin     },
+  { id: 'notifications', label: 'Notifications', icon: Bell       },
+  { id: 'plan',          label: 'Plan',          icon: CreditCard },
 ]
 
 // ─── Address form ─────────────────────────────────────────────────────────────
@@ -420,6 +421,274 @@ function NotificationsTab() {
   )
 }
 
+// ─── Plan tab ─────────────────────────────────────────────────────────────────
+
+type PlanKey = 'free' | 'starter_api' | 'intelligence' | 'enterprise'
+
+const PLAN_ORDER: PlanKey[] = ['free', 'starter_api', 'intelligence', 'enterprise']
+
+const PLANS: {
+  key: PlanKey
+  label: string
+  price: string
+  annual: string | null
+  seats: string
+  accent: string
+  features: { label: string; included: boolean }[]
+}[] = [
+  {
+    key: 'free',
+    label: 'Free',
+    price: '£0',
+    annual: null,
+    seats: '1 seat',
+    accent: 'slate',
+    features: [
+      { label: 'Catalogue browsing',    included: true  },
+      { label: 'Live trade pricing',    included: true  },
+      { label: 'Bulk ordering',         included: true  },
+      { label: 'Distributor accounts',  included: true  },
+      { label: 'API access',            included: false },
+      { label: 'Retailer insights',     included: false },
+      { label: 'AI suggestions',        included: false },
+    ],
+  },
+  {
+    key: 'starter_api',
+    label: 'Starter API',
+    price: '£49',
+    annual: '£490/yr (2 months free)',
+    seats: '3 seats',
+    accent: 'blue',
+    features: [
+      { label: 'Catalogue browsing',    included: true  },
+      { label: 'Live trade pricing',    included: true  },
+      { label: 'Bulk ordering',         included: true  },
+      { label: 'Distributor accounts',  included: true  },
+      { label: 'API access',            included: true  },
+      { label: 'Retailer insights',     included: false },
+      { label: 'AI suggestions',        included: false },
+    ],
+  },
+  {
+    key: 'intelligence',
+    label: 'Intelligence',
+    price: '£99',
+    annual: '£990/yr (2 months free)',
+    seats: '10 seats',
+    accent: 'violet',
+    features: [
+      { label: 'Catalogue browsing',    included: true  },
+      { label: 'Live trade pricing',    included: true  },
+      { label: 'Bulk ordering',         included: true  },
+      { label: 'Distributor accounts',  included: true  },
+      { label: 'API access',            included: true  },
+      { label: 'Retailer insights',     included: true  },
+      { label: 'AI suggestions',        included: true  },
+    ],
+  },
+  {
+    key: 'enterprise',
+    label: 'Enterprise',
+    price: 'Custom',
+    annual: null,
+    seats: 'Unlimited seats',
+    accent: 'amber',
+    features: [
+      { label: 'Catalogue browsing',    included: true  },
+      { label: 'Live trade pricing',    included: true  },
+      { label: 'Bulk ordering',         included: true  },
+      { label: 'Distributor accounts',  included: true  },
+      { label: 'API access',            included: true  },
+      { label: 'Retailer insights',     included: true  },
+      { label: 'AI suggestions',        included: true  },
+    ],
+  },
+]
+
+const ACCENT_RING: Record<string, string> = {
+  slate:  'ring-slate-300',
+  blue:   'ring-blue-400',
+  violet: 'ring-violet-500',
+  amber:  'ring-amber-500',
+}
+
+const ACCENT_BADGE: Record<string, string> = {
+  slate:  'bg-slate-100 text-slate-700',
+  blue:   'bg-blue-100 text-blue-700',
+  violet: 'bg-violet-100 text-violet-700',
+  amber:  'bg-amber-100 text-amber-700',
+}
+
+const ACCENT_BTN: Record<string, string> = {
+  slate:  'bg-slate-800 hover:bg-slate-900 text-white',
+  blue:   'bg-blue-600 hover:bg-blue-700 text-white',
+  violet: 'bg-violet-600 hover:bg-violet-700 text-white',
+  amber:  'bg-amber-500 hover:bg-amber-600 text-white',
+}
+
+function PlanTab() {
+  const [profile, setProfile] = useState<RetailerProfile | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    getRetailerProfile().then(setProfile).finally(() => setLoading(false))
+  }, [])
+
+  if (loading) return <div className="animate-pulse h-64 bg-slate-100 rounded-xl" />
+  if (!profile) return null
+
+  const currentPlanIdx = PLAN_ORDER.indexOf(profile.plan as PlanKey)
+
+  const upgradeMailto = (targetPlan: string) => {
+    const subject = encodeURIComponent(`Plan upgrade request — ${profile.company_name}`)
+    const body = encodeURIComponent(
+      `Hi Metabookly,\n\nI'd like to upgrade my account (${profile.email}) from ${profile.plan} to the ${targetPlan} plan.\n\nPlease let me know the next steps.\n\nThanks`
+    )
+    return `mailto:support@metabookly.com?subject=${subject}&body=${body}`
+  }
+
+  return (
+    <div>
+      {/* Current plan banner */}
+      <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 mb-8 flex items-center justify-between">
+        <div>
+          <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">Current plan</p>
+          <div className="flex items-center gap-2">
+            <span className={cn(
+              'inline-block px-2.5 py-0.5 rounded-full text-sm font-semibold',
+              ACCENT_BADGE[(PLANS.find(p => p.key === profile.plan)?.accent ?? 'slate')]
+            )}>
+              {PLANS.find(p => p.key === profile.plan)?.label ?? profile.plan}
+            </span>
+            {profile.plan_activated_at && (
+              <span className="text-xs text-slate-400">
+                since {new Date(profile.plan_activated_at).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
+              </span>
+            )}
+            {profile.plan_expires_at && (
+              <span className="text-xs text-amber-600">
+                · expires {new Date(profile.plan_expires_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+              </span>
+            )}
+          </div>
+          {profile.extra_seats > 0 && (
+            <p className="text-xs text-slate-500 mt-1">+{profile.extra_seats} extra seat{profile.extra_seats > 1 ? 's' : ''}</p>
+          )}
+        </div>
+        {profile.plan !== 'enterprise' && (
+          <a
+            href={upgradeMailto('Enterprise')}
+            className="flex items-center gap-1.5 text-xs text-amber-600 hover:text-amber-700 font-medium"
+          >
+            <Mail size={12} /> Talk to us about Enterprise
+          </a>
+        )}
+      </div>
+
+      {/* Plan grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        {PLANS.map((plan, idx) => {
+          const isCurrent = plan.key === profile.plan
+          const isUpgrade = idx > currentPlanIdx
+          const isDowngrade = idx < currentPlanIdx
+
+          return (
+            <div
+              key={plan.key}
+              className={cn(
+                'relative bg-white border rounded-xl p-5 flex flex-col',
+                isCurrent
+                  ? `ring-2 ${ACCENT_RING[plan.accent]} border-transparent`
+                  : 'border-slate-200',
+              )}
+            >
+              {isCurrent && (
+                <div className="absolute -top-2.5 left-1/2 -translate-x-1/2">
+                  <span className={cn(
+                    'text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full',
+                    ACCENT_BADGE[plan.accent]
+                  )}>
+                    Current plan
+                  </span>
+                </div>
+              )}
+
+              {/* Header */}
+              <div className="mb-4">
+                <p className="text-sm font-semibold text-slate-900 mb-1">{plan.label}</p>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-2xl font-bold text-slate-900">{plan.price}</span>
+                  {plan.price !== 'Custom' && <span className="text-xs text-slate-400">/mo</span>}
+                </div>
+                {plan.annual && (
+                  <p className="text-[11px] text-emerald-600 font-medium mt-0.5">{plan.annual}</p>
+                )}
+                <p className="text-xs text-slate-500 mt-1.5">{plan.seats}</p>
+              </div>
+
+              {/* Features */}
+              <ul className="space-y-2 flex-1 mb-5">
+                {plan.features.map(f => (
+                  <li key={f.label} className="flex items-center gap-2 text-xs">
+                    {f.included
+                      ? <CheckCircle2 size={13} className="text-emerald-500 shrink-0" />
+                      : <Minus size={13} className="text-slate-300 shrink-0" />
+                    }
+                    <span className={f.included ? 'text-slate-700' : 'text-slate-400'}>{f.label}</span>
+                  </li>
+                ))}
+              </ul>
+
+              {/* CTA */}
+              {isCurrent ? (
+                <div className="flex items-center justify-center gap-1.5 py-2 text-xs font-medium text-slate-400">
+                  <Check size={13} /> Active
+                </div>
+              ) : plan.key === 'enterprise' ? (
+                <a
+                  href={upgradeMailto('Enterprise')}
+                  className={cn(
+                    'block text-center py-2 px-3 rounded-lg text-xs font-medium transition-colors',
+                    ACCENT_BTN[plan.accent]
+                  )}
+                >
+                  Contact us
+                </a>
+              ) : isUpgrade ? (
+                <a
+                  href={upgradeMailto(plan.label)}
+                  className={cn(
+                    'block text-center py-2 px-3 rounded-lg text-xs font-medium transition-colors',
+                    ACCENT_BTN[plan.accent]
+                  )}
+                >
+                  Upgrade to {plan.label}
+                </a>
+              ) : isDowngrade ? (
+                <a
+                  href={upgradeMailto(plan.label)}
+                  className="block text-center py-2 px-3 rounded-lg text-xs font-medium text-slate-500 border border-slate-200 hover:bg-slate-50 transition-colors"
+                >
+                  Downgrade
+                </a>
+              ) : null}
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Annual billing note */}
+      <p className="text-xs text-slate-400 text-center mt-6">
+        Annual billing saves 17% (pay 10 months, get 12). Extra seats available on paid plans.
+        All plan changes take effect immediately — contact{' '}
+        <a href="mailto:support@metabookly.com" className="text-amber-600 hover:underline">support@metabookly.com</a>
+        {' '}for billing questions.
+      </p>
+    </div>
+  )
+}
+
 // ─── Main settings page ───────────────────────────────────────────────────────
 
 function SettingsContent() {
@@ -427,7 +696,10 @@ function SettingsContent() {
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') ?? 'profile')
 
   return (
-    <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8">
+    <div className={cn(
+      'mx-auto px-4 sm:px-6 py-8',
+      activeTab === 'plan' ? 'max-w-5xl' : 'max-w-3xl',
+    )}>
       <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2 mb-6">
         <Settings size={24} className="text-amber-500" />
         Account settings
@@ -459,6 +731,7 @@ function SettingsContent() {
       {activeTab === 'profile'       && <ProfileTab />}
       {activeTab === 'addresses'     && <AddressesTab />}
       {activeTab === 'notifications' && <NotificationsTab />}
+      {activeTab === 'plan'          && <PlanTab />}
     </div>
   )
 }

@@ -238,6 +238,10 @@ async def get_me(
         email=retailer.email,
         country_code=retailer.country_code,
         san=retailer.san,
+        plan=retailer.plan,
+        plan_activated_at=retailer.plan_activated_at,
+        plan_expires_at=retailer.plan_expires_at,
+        extra_seats=retailer.extra_seats,
         accounts=[_account_out(a) for a in accounts],
     )
 
@@ -274,6 +278,10 @@ async def update_profile(
         email=retailer.email,
         country_code=retailer.country_code,
         san=retailer.san,
+        plan=retailer.plan,
+        plan_activated_at=retailer.plan_activated_at,
+        plan_expires_at=retailer.plan_expires_at,
+        extra_seats=retailer.extra_seats,
         accounts=[_account_out(a) for a in accounts],
     )
 

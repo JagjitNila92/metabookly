@@ -43,6 +43,10 @@ class RetailerProfileOut(BaseModel):
     phone: str | None = None
     role: str | None = None
     referral_source: str | None = None
+    plan: str = "free"
+    plan_activated_at: datetime | None = None
+    plan_expires_at: datetime | None = None
+    extra_seats: int = 0
     accounts: list[LinkedAccountOut]
 
     model_config = {"from_attributes": True}

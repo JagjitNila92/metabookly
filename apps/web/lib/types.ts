@@ -216,6 +216,10 @@ export interface RetailerProfile {
   email: string
   country_code: string
   san: string | null
+  plan: string
+  plan_activated_at: string | null
+  plan_expires_at: string | null
+  extra_seats: number
   accounts: LinkedAccount[]
 }
 
