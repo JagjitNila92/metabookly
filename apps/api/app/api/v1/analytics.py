@@ -509,7 +509,7 @@ async def publisher_analytics(
     # ── Genre / subject breakdown ──────────────────────────────────────────────
     genre_rows = await db.execute(
         select(
-            BookSubject.heading,
+            BookSubject.subject_heading,
             func.count(distinct(BookViewEvent.book_id)).label("title_count"),
             func.count(BookViewEvent.id).label("views"),
         )
@@ -518,11 +518,11 @@ async def publisher_analytics(
         .where(
             Book.id.in_(book_ids_subq),
             BookSubject.scheme_id.in_(["12", "10", "93"]),  # BIC, BISAC, Thema
-            BookSubject.heading.isnot(None),
+            BookSubject.subject_heading.isnot(None),
             BookViewEvent.is_anonymous == False,  # noqa: E712
             BookViewEvent.created_at >= since,
         )
-        .group_by(BookSubject.heading)
+        .group_by(BookSubject.subject_heading)
         .order_by(func.count(BookViewEvent.id).desc())
         .limit(12)
     )
@@ -568,7 +568,7 @@ async def publisher_analytics(
             for r in top_titles.all()
         ],
         "genre_breakdown": [
-            {"genre": r.heading, "title_count": r.title_count, "views": r.views}
+            {"genre": r.subject_heading, "title_count": r.title_count, "views": r.views}
             for r in genre_rows.all()
         ],
         "retailer_countries": [

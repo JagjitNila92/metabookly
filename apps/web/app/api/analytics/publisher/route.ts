@@ -14,5 +14,10 @@ export async function GET(req: Request) {
     headers: { Authorization: `Bearer ${session.accessToken}` },
     cache: 'no-store',
   })
-  return NextResponse.json(await res.json(), { status: res.status })
+  const text = await res.text()
+  try {
+    return NextResponse.json(JSON.parse(text), { status: res.status })
+  } catch {
+    return NextResponse.json({ error: text || 'Empty response from API' }, { status: res.status || 500 })
+  }
 }
