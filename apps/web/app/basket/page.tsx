@@ -14,6 +14,7 @@ import {
 } from '@/lib/api'
 import type { BasketResponse, RoutedItem, Address, Order, RetailerProfile } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import FeatureGate, { ComingSoonBanner } from '@/components/FeatureGate'
 
 // ─── Status helpers ───────────────────────────────────────────────────────────
 
@@ -263,6 +264,29 @@ function ItemStatusBadge({ status }: { status: string }) {
 // ─── Main basket page ─────────────────────────────────────────────────────────
 
 export default function BasketPage() {
+  return (
+    <FeatureGate
+      flag="ordering_enabled"
+      fallback={
+        <div className="max-w-3xl mx-auto px-4 py-24 flex flex-col items-center text-center gap-6">
+          <ShoppingCart size={40} className="text-slate-200" />
+          <div>
+            <h1 className="text-xl font-bold text-slate-900 mb-2">Ordering Coming Soon</h1>
+            <p className="text-sm text-slate-500 max-w-sm">
+              We&apos;re onboarding publishers before activating ordering. You&apos;ll be
+              notified as soon as it goes live.
+            </p>
+          </div>
+          <ComingSoonBanner message="Browse the catalog and save titles — ordering activates when we have enough publisher coverage." />
+        </div>
+      }
+    >
+      <BasketPageInner />
+    </FeatureGate>
+  )
+}
+
+function BasketPageInner() {
   const [basket, setBasket] = useState<BasketResponse | null>(null)
   const [addresses, setAddresses] = useState<Address[]>([])
   const [profile, setProfile] = useState<RetailerProfile | null>(null)

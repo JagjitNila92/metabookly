@@ -1,9 +1,17 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Boolean, ForeignKey, Text, func
+from sqlalchemy import Boolean, ForeignKey, Integer, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
+
+# Max seats per plan (used by service layer — not stored in DB)
+PLAN_MAX_SEATS: dict[str, int | None] = {
+    "free": 1,
+    "starter_api": 3,
+    "intelligence": 10,
+    "enterprise": None,  # unlimited
+}
 
 # Status lifecycle: pending → approved | rejected
 # A retailer can withdraw a pending/rejected request (status → withdrawn).
@@ -23,6 +31,13 @@ class Retailer(Base):
     phone: Mapped[str | None] = mapped_column(Text)
     role: Mapped[str | None] = mapped_column(Text)
     referral_source: Mapped[str | None] = mapped_column(Text)
+    # Plan tier: free | starter_api | intelligence | enterprise
+    plan: Mapped[str] = mapped_column(Text, nullable=False, default="free")
+    plan_activated_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    plan_expires_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    # Extra seats purchased on top of plan default (billed via Stripe)
+    extra_seats: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(default=func.now())
     updated_at: Mapped[datetime] = mapped_column(default=func.now(), onupdate=func.now())

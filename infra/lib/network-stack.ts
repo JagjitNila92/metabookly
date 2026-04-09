@@ -14,10 +14,13 @@ export class NetworkStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
-    // VPC with 2 AZs (minimum for Aurora), 1 NAT gateway
+    // VPC with 2 AZs (minimum for Aurora), 1 NAT instance (t4g.nano ~$3/month vs NAT GW ~$35/month)
     this.vpc = new ec2.Vpc(this, 'MetabooklyVpc', {
       maxAzs: 2,
       natGateways: 1,
+      natGatewayProvider: ec2.NatProvider.instanceV2({
+        instanceType: ec2.InstanceType.of(ec2.InstanceClass.T4G, ec2.InstanceSize.NANO),
+      }),
       subnetConfiguration: [
         {
           cidrMask: 24,

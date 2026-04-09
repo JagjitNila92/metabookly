@@ -6,6 +6,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { usePathname } from 'next/navigation'
 import { ShoppingCart, ArrowLeftRight } from 'lucide-react'
 import { getBasket } from '@/lib/api'
+import FeatureGate from '@/components/FeatureGate'
 
 // ── Basket badge ──────────────────────────────────────────────────────────────
 
@@ -121,10 +122,13 @@ export function NavLinks() {
       {showRetailerNav && (
         <>
           <NavLink href="/dashboard">Dashboard</NavLink>
-          <NavLink href="/orders">Orders</NavLink>
-          <NavLink href="/order/bulk">Quick order</NavLink>
-          <NavLink href="/order/lists">Lists</NavLink>
-          <BasketBadge />
+          {/* Ordering links hidden until ordering_enabled flag is true */}
+          <FeatureGate flag="ordering_enabled">
+            <NavLink href="/orders">Orders</NavLink>
+            <NavLink href="/order/bulk">Quick order</NavLink>
+            <NavLink href="/order/lists">Lists</NavLink>
+            <BasketBadge />
+          </FeatureGate>
           <NavLink href="/settings">Settings</NavLink>
           <NavLink href="/account">My Account</NavLink>
         </>

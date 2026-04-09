@@ -17,13 +17,14 @@ export class DatabaseStack extends cdk.Stack {
     super(scope, id, props);
 
     // Aurora Serverless v2 PostgreSQL
-    // Scales from 0.5 ACU (min) to 4 ACU (max) — cost-effective for MVP
+    // Scales from 0 ACU (min, scale-to-zero when idle) to 4 ACU (max)
     // 1 ACU ≈ 2GB RAM, ~$0.12/ACU-hour in eu-west-2
+    // Scale-to-zero: first connection after idle takes ~15-30s — acceptable for MVP
     this.cluster = new rds.DatabaseCluster(this, 'MetabooklyDatabase', {
       engine: rds.DatabaseClusterEngine.auroraPostgres({
         version: rds.AuroraPostgresEngineVersion.VER_16_4,
       }),
-      serverlessV2MinCapacity: 0.5,
+      serverlessV2MinCapacity: 0,
       serverlessV2MaxCapacity: 4,
       writer: rds.ClusterInstance.serverlessV2('Writer'),
       readers: [],  // No reader for MVP — add when read traffic grows

@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react'
 import { ShoppingCart, Check, AlertCircle } from 'lucide-react'
 import Link from 'next/link'
 import { addToBasket } from '@/lib/api'
+import FeatureGate from '@/components/FeatureGate'
 
 interface AddToBasketProps {
   isbn13: string
@@ -12,15 +13,25 @@ interface AddToBasketProps {
 
 export function AddToBasket({ isbn13 }: AddToBasketProps) {
   const { data: session, status } = useSession()
-  const [loading, setLoading] = useState(false)
-  const [added, setAdded] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   const groups: string[] = (session as { groups?: string[] } | null)?.groups ?? []
   const isRetailer = groups.includes('retailers') || groups.includes('admins')
 
   if (status === 'loading') return null
   if (!session || !isRetailer) return null
+
+  // Hide entirely when ordering is not yet enabled globally
+  return (
+    <FeatureGate flag="ordering_enabled" fallback={null} loading={null}>
+      <AddToBasketButton isbn13={isbn13} />
+    </FeatureGate>
+  )
+}
+
+function AddToBasketButton({ isbn13 }: { isbn13: string }) {
+  const [loading, setLoading] = useState(false)
+  const [added, setAdded] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   async function handleAdd() {
     setLoading(true)

@@ -9,8 +9,11 @@ export default withAuth(
     const isAdmin = groups.includes('admins')
     const isRetailer = groups.includes('retailers') || isAdmin
     const isPublisher = groups.includes('publishers') || isAdmin
+    const isDistributor = groups.includes('distributors') || isAdmin
 
     // Retailer dashboard + retailer-only routes
+    // Note: ordering_enabled flag is NOT enforced here — Edge middleware cannot
+    // make async DB calls. The basket/orders pages gate themselves via <FeatureGate>.
     if (
       pathname.startsWith('/dashboard') ||
       pathname.startsWith('/account') ||
@@ -32,9 +35,9 @@ export default withAuth(
       }
     }
 
-    // Distributor/admin-only routes
+    // Distributor portal routes
     if (pathname.startsWith('/distributor/')) {
-      if (!isAdmin) {
+      if (!isDistributor) {
         return NextResponse.redirect(new URL('/login', req.url))
       }
     }

@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 from app.api.v1 import (
-    analytics, basket, books, catalog, distributor, isbn_lists, onix, orders, portal, pricing, retailer, settings,
+    admin, analytics, basket, books, catalog, distributor, isbn_lists, onix, orders, portal, pricing, retailer, settings,
 )
 
 router = APIRouter(prefix="/api/v1")
@@ -16,3 +16,4 @@ router.include_router(analytics.router)
 router.include_router(basket.router)
 router.include_router(orders.router)
 router.include_router(isbn_lists.router)
+router.include_router(admin.router)
