@@ -1,12 +1,14 @@
 import Link from 'next/link'
-import { Upload, FileText, AlertTriangle, Sparkles, LayoutDashboard } from 'lucide-react'
+import { Upload, FileText, AlertTriangle, Sparkles, LayoutDashboard, Settings, BarChart2 } from 'lucide-react'
 
 const NAV = [
   { href: '/portal', label: 'Dashboard', icon: LayoutDashboard, exact: true },
   { href: '/portal/upload', label: 'Upload Feed', icon: Upload },
   { href: '/portal/feeds', label: 'Feed History', icon: FileText },
+  { href: '/portal/quality', label: 'Quality', icon: BarChart2 },
   { href: '/portal/conflicts', label: 'Conflicts', icon: AlertTriangle },
   { href: '/portal/suggestions', label: 'AI Review', icon: Sparkles },
+  { href: '/portal/settings', label: 'Settings', icon: Settings },
 ]
 
 export default function PortalLayout({ children }: { children: React.ReactNode }) {

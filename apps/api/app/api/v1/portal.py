@@ -26,34 +26,43 @@ GET  /portal/me                          My feed source record
 """
 from __future__ import annotations
 
+import hashlib
 import logging
+import secrets
 import uuid
 from datetime import datetime, UTC
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db, require_publisher
 from app.auth.models import CurrentUser
-from app.aws.s3 import download_from_s3, generate_onix_upload_url
+from app.aws.s3 import delete_cover_from_s3, download_from_s3, generate_onix_upload_url, upload_cover_to_s3
 from app.config import get_settings
 from app.models.book import Book
 from app.models.portal import (
     AiSuggestion,
     BookEditorialLayer,
+    BookMetadataVersion,
     FeedSource,
+    FeedSourceApiKey,
     MetadataConflict,
     OnixFeedV2,
 )
 from app.schemas.portal import (
     AiSuggestionListResponse,
     AiSuggestionOut,
+    ApiKeyCreated,
+    ApiKeyOut,
+    BookDetailOut,
+    BookVersionOut,
     BulkAcceptRequest,
     BulkAcceptResponse,
     ConflictListResponse,
     ConflictOut,
+    CreateApiKeyRequest,
     EditorialLayerOut,
     EditorialLayerUpdate,
     FeedSourceOut,
@@ -473,6 +482,200 @@ async def update_editorial_layer(
     return EditorialLayerOut.model_validate(layer)
 
 
+# ─── Book detail ──────────────────────────────────────────────────────────────
+
+@router.get("/books/{isbn13}", response_model=BookDetailOut)
+async def get_book_detail(
+    isbn13: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_publisher),
+) -> BookDetailOut:
+    """
+    Return the full merged book record for the portal book detail page.
+    Combines ONIX-sourced fields with any editorial layer overrides, and
+    exposes the original ONIX values so the UI can show what changed.
+    """
+    book = (
+        await db.execute(select(Book).where(Book.isbn13 == isbn13))
+    ).scalar_one_or_none()
+    if book is None:
+        raise HTTPException(404, "Book not found")
+
+    layer = (
+        await db.execute(
+            select(BookEditorialLayer).where(BookEditorialLayer.book_id == book.id)
+        )
+    ).scalar_one_or_none()
+
+    field_sources = dict(layer.field_sources or {}) if layer else {}
+
+    # Effective values: editorial override wins, falls back to ONIX
+    eff_description = (layer.description if layer and layer.description else book.description)
+    eff_toc         = (layer.toc if layer and layer.toc else book.toc)
+    eff_excerpt     = (layer.excerpt if layer and layer.excerpt else book.excerpt)
+
+    return BookDetailOut(
+        isbn13=book.isbn13,
+        isbn10=book.isbn10,
+        title=book.title,
+        subtitle=book.subtitle,
+        product_form=book.product_form,
+        page_count=book.page_count,
+        publication_date=book.publication_date.isoformat() if book.publication_date else None,
+        publishing_status=book.publishing_status,
+        uk_rights=book.uk_rights,
+        rrp_gbp=str(book.rrp_gbp) if book.rrp_gbp else None,
+        rrp_usd=str(book.rrp_usd) if book.rrp_usd else None,
+        cover_image_url=book.cover_image_url,
+        height_mm=book.height_mm,
+        width_mm=book.width_mm,
+        metadata_score=book.metadata_score,
+        description=eff_description,
+        toc=eff_toc,
+        excerpt=eff_excerpt,
+        field_sources=field_sources,
+        onix_description=book.description,
+        onix_toc=book.toc,
+        onix_excerpt=book.excerpt,
+    )
+
+
+# ─── Cover image upload ───────────────────────────────────────────────────────
+
+_ALLOWED_COVER_TYPES = {"image/jpeg", "image/png"}
+_MAX_COVER_BYTES = 10 * 1024 * 1024  # 10 MB
+
+
+@router.post("/books/{isbn13}/cover", status_code=200)
+async def upload_cover(
+    isbn13: str,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_publisher),
+) -> dict:
+    """
+    Upload a cover image for a book directly (separate from ONIX).
+
+    Accepts JPEG or PNG, max 10 MB. The image is stored in the assets S3 bucket
+    and books.cover_image_url is updated immediately.
+    """
+    book = (
+        await db.execute(select(Book).where(Book.isbn13 == isbn13))
+    ).scalar_one_or_none()
+    if book is None:
+        raise HTTPException(404, "Book not found")
+
+    content_type = file.content_type or ""
+    if content_type not in _ALLOWED_COVER_TYPES:
+        raise HTTPException(400, "Only JPEG and PNG images are accepted")
+
+    content = await file.read()
+    if len(content) > _MAX_COVER_BYTES:
+        raise HTTPException(400, "File exceeds 10 MB limit")
+
+    cover_url = upload_cover_to_s3(isbn13, content, content_type)
+    book.cover_image_url = cover_url
+    await db.commit()
+
+    return {"cover_image_url": cover_url}
+
+
+@router.delete("/books/{isbn13}/cover", status_code=204, response_model=None)
+async def delete_cover(
+    isbn13: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_publisher),
+) -> None:
+    """
+    Remove the manually uploaded cover for a book.
+
+    Deletes the S3 object and clears books.cover_image_url.
+    The next ONIX ingest will restore the ONIX-supplied cover URL if one exists.
+    """
+    book = (
+        await db.execute(select(Book).where(Book.isbn13 == isbn13))
+    ).scalar_one_or_none()
+    if book is None:
+        raise HTTPException(404, "Book not found")
+
+    delete_cover_from_s3(isbn13)
+    book.cover_image_url = None
+    await db.commit()
+
+
+# ─── Version history ──────────────────────────────────────────────────────────
+
+@router.get("/books/{isbn13}/versions", response_model=list[BookVersionOut])
+async def list_book_versions(
+    isbn13: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_publisher),
+) -> list[BookVersionOut]:
+    """List version history for a book (newest first, max 50)."""
+    book = (
+        await db.execute(select(Book).where(Book.isbn13 == isbn13))
+    ).scalar_one_or_none()
+    if book is None:
+        raise HTTPException(404, "Book not found")
+
+    versions = (
+        await db.execute(
+            select(BookMetadataVersion)
+            .where(BookMetadataVersion.book_id == book.id)
+            .order_by(BookMetadataVersion.version_number.desc())
+            .limit(50)
+        )
+    ).scalars().all()
+
+    return [BookVersionOut.model_validate(v) for v in versions]
+
+
+@router.post("/books/{isbn13}/versions/{version_id}/restore", status_code=200)
+async def restore_book_version(
+    isbn13: str,
+    version_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_publisher),
+) -> dict:
+    """
+    Restore a book to a previous snapshot.
+
+    Applies the snapshot fields back to the Book record and writes a new version
+    entry so the restore itself is tracked in the audit trail.
+    """
+    book = (
+        await db.execute(select(Book).where(Book.isbn13 == isbn13))
+    ).scalar_one_or_none()
+    if book is None:
+        raise HTTPException(404, "Book not found")
+
+    version = (
+        await db.execute(
+            select(BookMetadataVersion).where(
+                BookMetadataVersion.id == version_id,
+                BookMetadataVersion.book_id == book.id,
+            )
+        )
+    ).scalar_one_or_none()
+    if version is None:
+        raise HTTPException(404, "Version not found")
+
+    # Restorable text fields from the snapshot
+    restorable = ("title", "subtitle", "description", "toc", "excerpt",
+                  "product_form", "page_count", "publishing_status", "uk_rights")
+    snap = version.snapshot
+    for field in restorable:
+        if field in snap:
+            setattr(book, field, snap[field])
+
+    # Write a new snapshot marking the restore
+    from app.services.portal_service import _snapshot_book
+    await _snapshot_book(db, book, changed_by=f"restore:{current_user.sub}:{version_id}")
+
+    await db.commit()
+    return {"restored_version": version.version_number, "isbn13": isbn13}
+
+
 # ─── AI suggestions ───────────────────────────────────────────────────────────
 
 @router.get("/suggestions", response_model=AiSuggestionListResponse)
@@ -602,6 +805,41 @@ async def bulk_accept_suggestions(
     return BulkAcceptResponse(accepted=accepted, rejected=0)
 
 
+@router.post("/suggestions/generate", status_code=202)
+async def generate_suggestions(
+    background_tasks: BackgroundTasks,
+    field: str = Query("description", description="description | toc | excerpt"),
+    limit: int = Query(20, ge=1, le=50),
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_publisher),
+) -> dict:
+    """
+    Trigger on-demand AI suggestion generation for a specific field.
+    Runs in the background — returns immediately with 202 Accepted.
+    """
+    from app.services.ai_service import generate_field_suggestions, SupportedField
+
+    if field not in ("description", "toc", "excerpt"):
+        raise HTTPException(400, "field must be one of: description, toc, excerpt")
+
+    source = await _require_feed_source(db, current_user)
+
+    async def _run() -> None:
+        from app.db.engine import get_session_factory
+        async with get_session_factory()() as bg_session:
+            try:
+                count = await generate_field_suggestions(
+                    bg_session, source.id, field=field, limit=limit  # type: ignore[arg-type]
+                )
+                await bg_session.commit()
+                logger.info("Generated %d AI suggestions for field=%s source=%s", count, field, source.id)
+            except Exception as exc:
+                logger.warning("Background AI generation failed for field=%s: %s", field, exc)
+
+    background_tasks.add_task(_run)
+    return {"status": "generating", "field": field}
+
+
 async def _apply_suggestion(
     db: AsyncSession,
     suggestion: AiSuggestion,
@@ -636,3 +874,123 @@ async def _apply_suggestion(
     suggestion.status = new_status
     suggestion.reviewed_by = reviewer_sub
     suggestion.reviewed_at = datetime.now(UTC).replace(tzinfo=None)
+
+
+# ─── API key management ───────────────────────────────────────────────────────
+
+def _hash_key(plaintext: str) -> str:
+    """SHA-256 hash of the plaintext key for storage."""
+    return hashlib.sha256(plaintext.encode()).hexdigest()
+
+
+@router.post("/api-keys", response_model=ApiKeyCreated, status_code=201)
+async def create_api_key(
+    body: CreateApiKeyRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_publisher),
+) -> ApiKeyCreated:
+    """
+    Generate a new API key for programmatic ONIX uploads.
+    The plaintext key is returned ONCE and never stored — save it immediately.
+    """
+    source = await _require_feed_source(db, current_user)
+
+    # Enforce a cap of 5 active keys per source
+    active_count = (
+        await db.execute(
+            select(func.count()).select_from(FeedSourceApiKey).where(
+                FeedSourceApiKey.feed_source_id == source.id,
+                FeedSourceApiKey.revoked == False,  # noqa: E712
+            )
+        )
+    ).scalar_one()
+    if active_count >= 5:
+        raise HTTPException(
+            status_code=409,
+            detail="Maximum of 5 active API keys reached. Revoke one before creating another.",
+        )
+
+    # Generate a secure random key with a recognisable prefix
+    raw = secrets.token_urlsafe(32)
+    plaintext = f"mb_live_{raw}"
+    key_prefix = plaintext[:16]  # "mb_live_" + first 8 chars
+
+    key = FeedSourceApiKey(
+        feed_source_id=source.id,
+        key_hash=_hash_key(plaintext),
+        key_prefix=key_prefix,
+        label=body.label,
+    )
+    db.add(key)
+    await db.commit()
+    await db.refresh(key)
+
+    return ApiKeyCreated(
+        id=key.id,
+        key_prefix=key.key_prefix,
+        label=key.label,
+        created_at=key.created_at,
+        last_used_at=key.last_used_at,
+        plaintext_key=plaintext,
+    )
+
+
+@router.get("/api-keys", response_model=list[ApiKeyOut])
+async def list_api_keys(
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_publisher),
+) -> list[ApiKeyOut]:
+    """List active API keys for the current publisher (never returns plaintext)."""
+    source = await _require_feed_source(db, current_user)
+
+    keys = (
+        await db.execute(
+            select(FeedSourceApiKey).where(
+                FeedSourceApiKey.feed_source_id == source.id,
+                FeedSourceApiKey.revoked == False,  # noqa: E712
+            ).order_by(FeedSourceApiKey.created_at.desc())
+        )
+    ).scalars().all()
+
+    return [ApiKeyOut.model_validate(k) for k in keys]
+
+
+@router.delete("/api-keys/{key_prefix}", status_code=204, response_model=None)
+async def revoke_api_key(
+    key_prefix: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_publisher),
+) -> None:
+    """Revoke an API key by its prefix. Immediately invalidates the key."""
+    source = await _require_feed_source(db, current_user)
+
+    key = (
+        await db.execute(
+            select(FeedSourceApiKey).where(
+                FeedSourceApiKey.key_prefix == key_prefix,
+                FeedSourceApiKey.feed_source_id == source.id,
+                FeedSourceApiKey.revoked == False,  # noqa: E712
+            )
+        )
+    ).scalar_one_or_none()
+
+    if key is None:
+        raise HTTPException(status_code=404, detail="API key not found")
+
+    key.revoked = True
+    await db.commit()
+
+
+@router.get("/quality")
+async def get_quality_summary(
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_publisher),
+) -> dict:
+    """
+    Return metadata quality summary for the publisher's catalog.
+    Includes average score, per-issue breakdown, and worst-scoring titles.
+    """
+    from app.services.metadata_quality import get_quality_summary
+
+    source = await _require_feed_source(db, current_user)
+    return await get_quality_summary(db, source.id)

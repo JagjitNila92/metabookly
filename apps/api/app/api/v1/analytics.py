@@ -388,10 +388,12 @@ async def publisher_analytics(
         if not feed_source:
             return _empty_publisher_response(days)
 
-        feed_ids = select(OnixFeedV2.id).where(OnixFeedV2.feed_source_id == feed_source)
-        # Books ingested from this publisher's feeds — via book_metadata_versions or
-        # just use all books for now (refined when real publisher data exists)
-        book_ids_subq = select(Book.id).scalar_subquery()
+        # Scope to books ingested from this publisher's feeds via BookDistributor
+        book_ids_subq = (
+            select(BookDistributor.book_id)
+            .where(BookDistributor.feed_source_id == feed_source)
+            .scalar_subquery()
+        )
 
     # ── Summary counts ─────────────────────────────────────────────────────────
     total_views_row = (await db.execute(

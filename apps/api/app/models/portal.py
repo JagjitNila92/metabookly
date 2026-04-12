@@ -31,12 +31,16 @@ class FeedSource(Base):
     # Portal login — set when they create a portal account via Cognito
     cognito_sub: Mapped[str | None] = mapped_column(Text, unique=True)
 
-    # API key for automated (non-portal) uploads — stored hashed
+    # API key for automated (non-portal) uploads — stored hashed (legacy single-key)
     api_key_hash: Mapped[str | None] = mapped_column(Text)
     api_key_prefix: Mapped[str | None] = mapped_column(Text)        # e.g. "mb_sk_abcd" for display
 
     contact_email: Mapped[str | None] = mapped_column(Text)
+    contact_name: Mapped[str | None] = mapped_column(Text)
     webhook_url: Mapped[str | None] = mapped_column(Text)           # POST feed status here on completion
+
+    # Plan tier for self-registered publishers: free | starter | pro
+    plan: Mapped[str] = mapped_column(Text, nullable=False, default="free")
 
     # Which distributor this feed source belongs to (set at onboarding).
     # NULL for legacy records. For publisher-uploaded feeds this is still set to
@@ -50,6 +54,7 @@ class FeedSource(Base):
     updated_at: Mapped[datetime] = mapped_column(default=func.now(), onupdate=func.now())
 
     feeds: Mapped[list["OnixFeedV2"]] = relationship("OnixFeedV2", back_populates="feed_source")
+    api_keys: Mapped[list["FeedSourceApiKey"]] = relationship("FeedSourceApiKey", back_populates="feed_source")
 
     __table_args__ = (
         Index("feed_sources_cognito_sub_idx", "cognito_sub"),
@@ -92,7 +97,13 @@ class OnixFeedV2(Base):
     records_skipped: Mapped[int | None] = mapped_column(Integer)    # lower-priority source
     records_conflicted: Mapped[int | None] = mapped_column(Integer) # editorial layer conflicts
     error_detail: Mapped[str | None] = mapped_column(Text)
-    sample_errors: Mapped[list | None] = mapped_column(JSONB)       # up to 20 sample error messages
+    sample_errors: Mapped[list | None] = mapped_column(JSONB)       # up to 20 ingest error strings
+
+    # Validation results (populated before ingest by onix_validator)
+    validation_passed: Mapped[bool | None] = mapped_column(Boolean)
+    validation_errors_count: Mapped[int | None] = mapped_column(Integer)
+    validation_warnings_count: Mapped[int | None] = mapped_column(Integer)
+    validation_errors: Mapped[list | None] = mapped_column(JSONB)   # structured [{isbn13,field,message,line,severity}]
 
     triggered_by: Mapped[str | None] = mapped_column(Text)         # portal | api_key | s3_event | admin
     started_at: Mapped[datetime | None] = mapped_column()
@@ -255,6 +266,33 @@ class BookDistributor(Base):
     __table_args__ = (
         Index("book_distributors_book_id_idx", "book_id"),
         Index("book_distributors_distributor_code_idx", "distributor_code"),
+    )
+
+
+class FeedSourceApiKey(Base):
+    """
+    Named API keys for a publisher's feed source.
+    Supports multiple concurrent keys (e.g. for rotation).
+    Keys are returned in plaintext only at creation; only the hash is stored.
+    """
+    __tablename__ = "feed_source_api_keys"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    feed_source_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("feed_sources.id", ondelete="CASCADE"), nullable=False
+    )
+    key_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    key_prefix: Mapped[str] = mapped_column(Text, nullable=False)   # first 12 chars shown in UI
+    label: Mapped[str | None] = mapped_column(Text)                 # optional human-readable name
+    revoked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    last_used_at: Mapped[datetime | None] = mapped_column()
+    created_at: Mapped[datetime] = mapped_column(default=func.now())
+
+    feed_source: Mapped["FeedSource"] = relationship("FeedSource", back_populates="api_keys")
+
+    __table_args__ = (
+        Index("feed_source_api_keys_feed_source_idx", "feed_source_id"),
+        Index("feed_source_api_keys_prefix_idx", "key_prefix", unique=True),
     )
 
 

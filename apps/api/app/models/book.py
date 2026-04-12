@@ -57,6 +57,9 @@ class Book(Base):
     height_mm: Mapped[int | None] = mapped_column(SmallInteger)        # physical height in mm (ONIX MeasureType 01)
     width_mm: Mapped[int | None] = mapped_column(SmallInteger)         # physical width in mm (ONIX MeasureType 02)
 
+    # Fields added by migration 0019 — computed on every ingest
+    metadata_score: Mapped[int | None] = mapped_column(SmallInteger)   # 0–100 quality score
+
     created_at: Mapped[datetime] = mapped_column(default=func.now())
     updated_at: Mapped[datetime] = mapped_column(default=func.now(), onupdate=func.now())
 

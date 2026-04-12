@@ -246,6 +246,59 @@ async def send_welcome_email(
     )
 
 
+async def send_publisher_welcome_email(
+    *,
+    publisher_email: str,
+    contact_name: str,
+    company_name: str,
+) -> None:
+    """Sent to a publisher immediately after self-service registration."""
+    first_name = contact_name.split()[0] if contact_name else "there"
+
+    body = f"""
+    <h2 style="margin:0 0 8px;color:#0f172a;font-size:22px;">Welcome to Metabookly, {first_name}!</h2>
+    <p style="margin:0 0 24px;color:#64748b;font-size:15px;">
+      Your publisher account for <strong>{company_name}</strong> is ready.
+      Upload your ONIX catalogue and your titles will be live in the Metabookly catalogue within minutes —
+      visible to thousands of UK booksellers, for free.
+    </p>
+
+    <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:20px;margin-bottom:24px;">
+      <p style="margin:0 0 12px;font-size:13px;font-weight:600;color:#92400e;text-transform:uppercase;letter-spacing:0.05em;">Your account details</p>
+      <table cellpadding="0" cellspacing="0" style="width:100%;">
+        {_field_row("Email", publisher_email)}
+        {_field_row("Company", company_name)}
+        {_field_row("Plan", "Free — unlimited title listings")}
+      </table>
+    </div>
+
+    <p style="margin:0 0 16px;color:#475569;font-size:14px;">
+      <strong>Getting started:</strong>
+    </p>
+    <ol style="margin:0 0 24px;padding-left:20px;color:#475569;font-size:14px;line-height:1.8;">
+      <li>Sign in at <a href="https://metabookly.com/login" style="color:#f59e0b;">metabookly.com/login</a></li>
+      <li>Go to <strong>Upload Feed</strong> and drop in your ONIX 3.0 or ONIX 2.1 XML file</li>
+      <li>Your titles appear in the catalogue immediately — with metadata quality scoring and AI enrichment</li>
+    </ol>
+
+    <a href="https://metabookly.com/login"
+       style="display:inline-block;background:#f59e0b;color:#ffffff;text-decoration:none;
+              padding:12px 24px;border-radius:8px;font-size:15px;font-weight:600;">
+      Go to Publisher Portal
+    </a>
+
+    <p style="margin:24px 0 0;color:#94a3b8;font-size:13px;">
+      Questions? Contact us at
+      <a href="mailto:support@metabookly.com" style="color:#f59e0b;">support@metabookly.com</a>
+    </p>"""
+
+    await _send(
+        to_address=publisher_email,
+        subject=f"Welcome to Metabookly — your publisher portal is ready",
+        html_body=_wrap_html("Welcome to Metabookly", body),
+    )
+
+
 async def send_publisher_invite_email(
     *,
     publisher_email: str,

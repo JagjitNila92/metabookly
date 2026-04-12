@@ -1,4 +1,4 @@
-"""S3 helpers for ONIX feed upload."""
+"""S3 helpers for ONIX feed upload and asset storage."""
 import boto3
 from app.config import get_settings
 
@@ -41,3 +41,39 @@ def download_from_s3(bucket: str, key: str) -> bytes:
     s3 = boto3.client("s3", region_name=settings.aws_region)
     response = s3.get_object(Bucket=bucket, Key=key)
     return response["Body"].read()
+
+
+def upload_cover_to_s3(isbn13: str, content: bytes, content_type: str) -> str:
+    """
+    Upload a cover image to the assets bucket.
+
+    Stored at: covers/{isbn13}/original.{ext}
+
+    Returns the public HTTPS URL of the uploaded image.
+    """
+    settings = get_settings()
+    ext = "jpg" if content_type == "image/jpeg" else "png"
+    key = f"covers/{isbn13}/original.{ext}"
+
+    s3 = boto3.client("s3", region_name=settings.aws_region)
+    s3.put_object(
+        Bucket=settings.assets_bucket_name,
+        Key=key,
+        Body=content,
+        ContentType=content_type,
+        CacheControl="public, max-age=31536000",
+    )
+
+    return f"https://{settings.assets_bucket_name}.s3.{settings.aws_region}.amazonaws.com/{key}"
+
+
+def delete_cover_from_s3(isbn13: str) -> None:
+    """Delete both jpg and png cover variants for an ISBN."""
+    settings = get_settings()
+    s3 = boto3.client("s3", region_name=settings.aws_region)
+    for ext in ("jpg", "png"):
+        key = f"covers/{isbn13}/original.{ext}"
+        try:
+            s3.delete_object(Bucket=settings.assets_bucket_name, Key=key)
+        except Exception:
+            pass  # Best-effort — object may not exist

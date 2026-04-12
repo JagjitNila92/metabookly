@@ -433,7 +433,15 @@ async def ingest_onix_portal(
 
     # ── Detect ONIX version ───────────────────────────────────────────────────
     from app.parsers import detect_onix_version
+    from app.parsers.onix_validator import validate_onix
     onix_version = detect_onix_version(content)
+
+    # ── Pre-ingest validation ─────────────────────────────────────────────────
+    val_result = validate_onix(content)
+    logger.info(
+        "Validation for feed source %s: passed=%s errors=%d warnings=%d",
+        feed_source_id, val_result.passed, val_result.error_count, val_result.warning_count,
+    )
 
     # ── Sequence gap detection ────────────────────────────────────────────────
     gaps_detected = False
@@ -464,6 +472,10 @@ async def ingest_onix_portal(
         status="processing",
         triggered_by=triggered_by,
         started_at=datetime.now(UTC).replace(tzinfo=None),
+        validation_passed=val_result.passed,
+        validation_errors_count=val_result.error_count,
+        validation_warnings_count=val_result.warning_count,
+        validation_errors=val_result.to_sample_list() or None,
     )
     session.add(feed)
     await session.flush()
@@ -485,16 +497,16 @@ async def ingest_onix_portal(
                 if outcome == "upserted":
                     upserted += 1
                     upserted_book_ids.append(book_id)
-                    if distributor_code and book_id:
-                        await _upsert_book_distributor(session, book_id, distributor_code, feed_source_id)
+                    if book_id:
+                        await _upsert_book_distributor(session, book_id, distributor_code or "DIRECT", feed_source_id)
                 elif outcome == "skipped":
                     skipped += 1
                 elif outcome == "conflicted":
                     upserted += 1
                     conflicted += 1
                     upserted_book_ids.append(book_id)
-                    if distributor_code and book_id:
-                        await _upsert_book_distributor(session, book_id, distributor_code, feed_source_id)
+                    if book_id:
+                        await _upsert_book_distributor(session, book_id, distributor_code or "DIRECT", feed_source_id)
                 elif outcome == "deleted":
                     upserted += 1
             except Exception as exc:
@@ -544,6 +556,16 @@ async def ingest_onix_portal(
                 logger.info("AI enrichment: %d suggestion(s) created for feed %s", ai_count, feed_id)
         except Exception as exc:
             logger.warning("AI enrichment step failed for feed %s: %s", feed_id, exc)
+
+    # ── Metadata quality scoring (best-effort) ────────────────────────────────
+    if upserted_book_ids:
+        try:
+            from app.services.metadata_quality import score_books
+            scored = await score_books(session, upserted_book_ids)
+            if scored:
+                logger.info("Scored %d books for feed %s", scored, feed_id)
+        except Exception as exc:
+            logger.warning("Metadata scoring failed for feed %s: %s", feed_id, exc)
 
     # ── Webhook notification (best-effort) ────────────────────────────────────
     if feed_source and feed_source.webhook_url:

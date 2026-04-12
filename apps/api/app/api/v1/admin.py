@@ -322,6 +322,7 @@ async def set_account_flag(
 @router.delete(
     "/flags/{account_type}/{account_id}/{flag_name}",
     status_code=204,
+    response_model=None,
 )
 async def delete_account_flag(
     account_type: str,
