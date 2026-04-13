@@ -51,6 +51,8 @@ export interface BookDetail extends BookSummary {
   product_form_detail: string | null
   height_mm: number | null
   width_mm: number | null
+  arc_enabled: boolean
+  arc_s3_key: string | null
   subjects: Subject[]
   created_at: string
   updated_at: string

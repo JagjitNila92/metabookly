@@ -63,6 +63,8 @@ class BookDetail(BookSummary):
     product_form_detail: str | None = None
     height_mm: int | None = None
     width_mm: int | None = None
+    arc_enabled: bool = False
+    arc_s3_key: str | None = None
     subjects: list[SubjectOut] = []
     created_at: datetime
     updated_at: datetime

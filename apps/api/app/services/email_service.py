@@ -403,3 +403,131 @@ async def notify_retailer_request_rejected(
         subject=f"Your {distributor_name} account link request was not approved — Metabookly",
         html_body=_wrap_html("Account Link Request Declined", body),
     )
+
+
+# ── ARC emails ─────────────────────────────────────────────────────────────────
+
+async def send_arc_request_to_publisher(
+    publisher_email: str,
+    publisher_name: str,
+    book_title: str,
+    isbn13: str,
+    requester_name: str,
+    requester_email: str,
+    requester_company: str | None,
+    requester_type: str,
+    requester_message: str | None,
+) -> None:
+    """Notify publisher that a new ARC request has been submitted for one of their titles."""
+    company_line = f"<p style='margin:4px 0;color:#475569;font-size:14px;'><strong>Company:</strong> {requester_company}</p>" if requester_company else ""
+    message_block = f"""
+    <div style='background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin-top:16px;'>
+      <p style='margin:0 0 4px;color:#64748b;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;'>Message from requester</p>
+      <p style='margin:0;color:#334155;font-size:14px;'>{requester_message}</p>
+    </div>""" if requester_message else ""
+
+    type_label = {"retailer": "Bookseller", "trade_press": "Trade Press", "blogger": "Book Blogger", "other": "Other"}.get(requester_type, requester_type.title())
+
+    body = f"""
+    <h2 style="margin:0 0 8px;color:#0f172a;font-size:22px;">New ARC Request</h2>
+    <p style="margin:0 0 24px;color:#64748b;font-size:15px;">
+      Someone has requested an Advance Reading Copy of <strong>{book_title}</strong>.
+    </p>
+
+    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:20px;margin-bottom:16px;">
+      <p style="margin:0 0 8px;color:#166534;font-size:15px;font-weight:600;">📚 {book_title}</p>
+      <p style="margin:0;color:#475569;font-size:13px;">ISBN: {isbn13}</p>
+    </div>
+
+    <p style="margin:0 0 8px;color:#0f172a;font-size:15px;font-weight:600;">Requester details</p>
+    <p style="margin:4px 0;color:#475569;font-size:14px;"><strong>Name:</strong> {requester_name}</p>
+    <p style="margin:4px 0;color:#475569;font-size:14px;"><strong>Email:</strong> {requester_email}</p>
+    <p style="margin:4px 0;color:#475569;font-size:14px;"><strong>Type:</strong> {type_label}</p>
+    {company_line}
+    {message_block}
+
+    <p style="margin:24px 0 16px;color:#475569;font-size:14px;">
+      Log in to your publisher portal to approve or decline this request.
+      If you decline, you'll need to provide a reason — this is shared with the requester.
+    </p>
+
+    <a href="https://metabookly.com/portal/arcs"
+       style="display:inline-block;background:#f59e0b;color:#ffffff;text-decoration:none;
+              padding:12px 24px;border-radius:8px;font-size:15px;font-weight:600;">
+      Review ARC Requests
+    </a>"""
+
+    await _send(
+        to_address=publisher_email,
+        subject=f"New ARC request for "{book_title}" — Metabookly",
+        html_body=_wrap_html("New ARC Request", body),
+    )
+
+
+async def send_arc_approved(
+    requester_email: str,
+    requester_name: str,
+    book_title: str,
+    publisher_name: str,
+    download_url: str,
+    expires_days: int = 30,
+) -> None:
+    """Notify requester that their ARC request has been approved with a download link."""
+    body = f"""
+    <h2 style="margin:0 0 8px;color:#0f172a;font-size:22px;">Your ARC Request was Approved</h2>
+    <p style="margin:0 0 24px;color:#64748b;font-size:15px;">
+      Hi {requester_name}, great news — <strong>{publisher_name}</strong> has approved your
+      request for an Advance Reading Copy of <strong>{book_title}</strong>.
+    </p>
+
+    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:20px;margin-bottom:24px;">
+      <p style="margin:0 0 4px;color:#166534;font-size:15px;font-weight:600;">✓ Request approved</p>
+      <p style="margin:0;color:#475569;font-size:14px;">Your download link is valid for {expires_days} days.</p>
+    </div>
+
+    <a href="{download_url}"
+       style="display:inline-block;background:#f59e0b;color:#ffffff;text-decoration:none;
+              padding:12px 24px;border-radius:8px;font-size:15px;font-weight:600;">
+      Download ARC (PDF)
+    </a>
+
+    <p style="margin:24px 0 0;color:#94a3b8;font-size:13px;">
+      This link expires in {expires_days} days. Please do not share it — it was generated for you personally.
+    </p>"""
+
+    await _send(
+        to_address=requester_email,
+        subject=f"Your ARC of "{book_title}" is ready to download — Metabookly",
+        html_body=_wrap_html("ARC Request Approved", body),
+    )
+
+
+async def send_arc_declined(
+    requester_email: str,
+    requester_name: str,
+    book_title: str,
+    publisher_name: str,
+    decline_reason: str,
+) -> None:
+    """Notify requester that their ARC request has been declined, with the publisher's reason."""
+    body = f"""
+    <h2 style="margin:0 0 8px;color:#0f172a;font-size:22px;">ARC Request Update</h2>
+    <p style="margin:0 0 24px;color:#64748b;font-size:15px;">
+      Hi {requester_name}, unfortunately <strong>{publisher_name}</strong> was unable to approve
+      your request for an Advance Reading Copy of <strong>{book_title}</strong> at this time.
+    </p>
+
+    <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:20px;margin-bottom:16px;">
+      <p style="margin:0 0 8px;color:#991b1b;font-size:15px;font-weight:600;">Request not approved</p>
+      <p style="margin:0;color:#334155;font-size:14px;">{decline_reason}</p>
+    </div>
+
+    <p style="margin:24px 0 0;color:#475569;font-size:14px;">
+      You may wish to contact the publisher directly if you have further questions.
+    </p>"""
+
+    await _send(
+        to_address=requester_email,
+        subject=f"Update on your ARC request for "{book_title}" — Metabookly",
+        html_body=_wrap_html("ARC Request Update", body),
+    )

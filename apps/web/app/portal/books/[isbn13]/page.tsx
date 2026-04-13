@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 import {
   Upload, Trash2, Loader2, CheckCircle2, AlertCircle, ImageOff,
   History, ChevronDown, ChevronUp, RotateCcw, ArrowLeft,
-  PenLine, Info, RefreshCw,
+  PenLine, Info, RefreshCw, FileDown,
 } from 'lucide-react'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -32,6 +32,8 @@ type BookDetail = {
   onix_description: string | null
   onix_toc: string | null
   onix_excerpt: string | null
+  arc_enabled: boolean
+  arc_s3_key: string | null
 }
 
 type BookVersion = {
@@ -198,6 +200,120 @@ function EditableField({
             </details>
           )}
         </div>
+      )}
+    </div>
+  )
+}
+
+// ── ARC panel ─────────────────────────────────────────────────────────────────
+
+function ArcPanel({
+  isbn13,
+  arcEnabled,
+  arcS3Key,
+  onUpdate,
+}: {
+  isbn13: string
+  arcEnabled: boolean
+  arcS3Key: string | null
+  onUpdate: () => void
+}) {
+  const arcFileRef = useRef<HTMLInputElement>(null)
+  const [uploading, setUploading] = useState(false)
+  const [removing, setRemoving] = useState(false)
+  const [arcError, setArcError] = useState('')
+
+  const handleArcUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.type !== 'application/pdf') { setArcError('Only PDF files are supported.'); return }
+    setUploading(true)
+    setArcError('')
+    try {
+      // 1. Get presigned URL
+      const urlRes = await fetch(`/api/portal/books/${isbn13}/arc`)
+      if (!urlRes.ok) throw new Error('Failed to get upload URL')
+      const { upload_url, s3_key } = await urlRes.json()
+
+      // 2. Upload directly to S3
+      const putRes = await fetch(upload_url, {
+        method: 'PUT',
+        body: file,
+        headers: { 'Content-Type': 'application/pdf' },
+      })
+      if (!putRes.ok) throw new Error('Upload to S3 failed')
+
+      // 3. Confirm
+      const confirmRes = await fetch(`/api/portal/books/${isbn13}/arc`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ s3_key, original_filename: file.name }),
+      })
+      if (!confirmRes.ok) throw new Error('Failed to confirm upload')
+      onUpdate()
+    } catch (err: any) {
+      setArcError(err.message ?? 'Upload failed')
+    } finally {
+      setUploading(false)
+      if (arcFileRef.current) arcFileRef.current.value = ''
+    }
+  }
+
+  const handleArcRemove = async () => {
+    setRemoving(true)
+    setArcError('')
+    try {
+      await fetch(`/api/portal/books/${isbn13}/arc`, { method: 'DELETE' })
+      onUpdate()
+    } catch { setArcError('Remove failed') } finally { setRemoving(false) }
+  }
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl px-5 py-4">
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <p className="text-sm font-semibold text-slate-800 flex items-center gap-1.5">
+            <FileDown size={15} className="text-slate-400" />
+            Advance Reading Copy (ARC)
+          </p>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Upload a PDF to enable ARC requests for this title. Booksellers and trade contacts can request access from the catalog page.
+          </p>
+        </div>
+      </div>
+
+      {arcError && (
+        <div className="mb-3 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+          {arcError}
+        </div>
+      )}
+
+      {arcEnabled && arcS3Key ? (
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg text-xs text-green-800 font-medium">
+            <CheckCircle2 size={13} /> ARC enabled — requests are open
+          </div>
+          <button
+            onClick={handleArcRemove}
+            disabled={removing}
+            className="flex items-center gap-1.5 text-xs text-red-500 hover:text-red-700 border border-red-200 rounded-lg px-3 py-2 disabled:opacity-50"
+          >
+            <Trash2 size={12} /> {removing ? 'Removing…' : 'Remove ARC'}
+          </button>
+        </div>
+      ) : (
+        <>
+          <input ref={arcFileRef} type="file" accept="application/pdf" className="hidden" onChange={handleArcUpload} />
+          <button
+            onClick={() => arcFileRef.current?.click()}
+            disabled={uploading}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50"
+          >
+            {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+            {uploading ? 'Uploading…' : 'Upload ARC PDF'}
+          </button>
+          <p className="text-xs text-slate-400 mt-1.5">PDF only. Max 50 MB recommended.</p>
+        </>
       )}
     </div>
   )
@@ -490,6 +606,9 @@ export default function BookDetailPage() {
               onSave={v => saveField('excerpt', v)}
             />
           </div>
+
+          {/* ARC (Advance Reading Copy) */}
+          <ArcPanel isbn13={isbn13} arcEnabled={book.arc_enabled} arcS3Key={book.arc_s3_key} onUpdate={loadBook} />
 
           {/* Version history */}
           <VersionHistory isbn13={isbn13} onRestore={() => { loadBook(); setNotice('Version restored.') }} />

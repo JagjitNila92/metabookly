@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     assets_bucket_name: str = "metabookly-assets-562675430068"
 
     # Bedrock
-    bedrock_model_id: str = "anthropic.claude-haiku-4-5-20251001-v1:0"
+    bedrock_model_id: str = "eu.anthropic.claude-haiku-4-5-20251001-v1:0"
 
     # SES — transactional email
     ses_from_email: str = "noreply@metabookly.com"

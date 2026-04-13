@@ -8,6 +8,7 @@ import { getBook } from '@/lib/api'
 import { BookCover } from '@/components/BookCover'
 import { PricingPanel } from '@/components/PricingPanel'
 import { AddToBasket } from '@/components/AddToBasket'
+import { ArcRequestButton } from '@/components/ArcRequestButton'
 import {
   PRODUCT_FORM,
   PUBLISHING_STATUS,
@@ -106,6 +107,9 @@ export default async function BookDetailPage({ params }: Props) {
 
           {/* Add to basket — retailer only, client-side */}
           <AddToBasket isbn13={book.isbn13} />
+
+          {/* ARC request — shown when publisher has enabled ARC for this title */}
+          {book.arc_enabled && <ArcRequestButton isbn13={book.isbn13} title={book.title} />}
 
           {/* UK rights */}
           {book.uk_rights !== null && (

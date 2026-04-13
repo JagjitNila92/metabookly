@@ -60,6 +60,10 @@ class Book(Base):
     # Fields added by migration 0019 — computed on every ingest
     metadata_score: Mapped[int | None] = mapped_column(SmallInteger)   # 0–100 quality score
 
+    # Fields added by migration 0020 — ARC (Advance Reading Copy)
+    arc_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    arc_s3_key: Mapped[str | None] = mapped_column(Text)               # S3 key of uploaded ARC file
+
     created_at: Mapped[datetime] = mapped_column(default=func.now())
     updated_at: Mapped[datetime] = mapped_column(default=func.now(), onupdate=func.now())
 

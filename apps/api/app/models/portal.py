@@ -6,6 +6,7 @@ BookEditorialLayer — editorial overrides that survive ONIX re-ingestion
 MetadataConflict   — queued conflicts when a feed update touches editorially-modified fields
 AiSuggestion       — AI-generated metadata improvements awaiting review
 BookMetadataVersion — point-in-time snapshots for rollback
+ArcRequest      — retailer/trade request for an Advance Reading Copy; publisher approves/declines
 """
 import uuid
 from datetime import datetime
@@ -365,4 +366,83 @@ class PriceCheckEvent(Base):
         Index("price_check_events_retailer_id_idx", "retailer_id"),
         Index("price_check_events_created_at_idx", "created_at"),
         Index("price_check_events_had_gap_idx", "had_gap"),
+    )
+
+
+class ArcRequest(Base):
+    """
+    A request for an Advance Reading Copy (ARC) of a title.
+    Submitted by retailers or trade contacts; publisher must approve or decline with a reason.
+    On approval a time-limited S3 presigned URL is generated and emailed to the requester.
+    """
+    __tablename__ = "arc_requests"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    book_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("books.id", ondelete="CASCADE"), nullable=False
+    )
+    feed_source_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("feed_sources.id", ondelete="SET NULL")
+    )
+
+    # Who requested it
+    requester_retailer_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("retailers.id", ondelete="SET NULL")
+    )
+    requester_type: Mapped[str] = mapped_column(Text, nullable=False)   # retailer | trade_press | blogger | other
+    requester_name: Mapped[str] = mapped_column(Text, nullable=False)
+    requester_email: Mapped[str] = mapped_column(Text, nullable=False)
+    requester_company: Mapped[str | None] = mapped_column(Text)
+    requester_message: Mapped[str | None] = mapped_column(Text)
+
+    # Decision
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="pending")  # pending | approved | declined
+    decline_reason: Mapped[str | None] = mapped_column(Text)            # required when status=declined
+    approved_expires_at: Mapped[datetime | None] = mapped_column()      # 30 days after approval
+    reviewed_by: Mapped[str | None] = mapped_column(Text)              # Cognito sub of publisher reviewer
+    reviewed_at: Mapped[datetime | None] = mapped_column()
+
+    created_at: Mapped[datetime] = mapped_column(default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        Index("arc_requests_book_id_idx", "book_id"),
+        Index("arc_requests_feed_source_id_idx", "feed_source_id"),
+        Index("arc_requests_status_idx", "status"),
+        Index("arc_requests_requester_email_idx", "requester_email"),
+    )
+
+
+class PublisherAsset(Base):
+    """
+    A marketing file uploaded by a publisher for a specific title.
+    Types: press_kit | author_photo | sell_sheet | media_pack | other
+    Public assets are visible to retailers on the book detail page.
+    """
+    __tablename__ = "publisher_assets"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    book_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("books.id", ondelete="CASCADE"), nullable=False
+    )
+    feed_source_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("feed_sources.id", ondelete="SET NULL")
+    )
+
+    asset_type: Mapped[str] = mapped_column(Text, nullable=False)   # press_kit | author_photo | sell_sheet | media_pack | other
+    label: Mapped[str] = mapped_column(Text, nullable=False)         # human-readable name
+    s3_key: Mapped[str] = mapped_column(Text, nullable=False)
+    original_filename: Mapped[str | None] = mapped_column(Text)
+    file_size_bytes: Mapped[int | None] = mapped_column(Integer)
+    content_type: Mapped[str | None] = mapped_column(Text)           # MIME type
+
+    public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    created_at: Mapped[datetime] = mapped_column(default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        Index("publisher_assets_book_id_idx", "book_id"),
+        Index("publisher_assets_feed_source_id_idx", "feed_source_id"),
+        Index("publisher_assets_asset_type_idx", "asset_type"),
     )

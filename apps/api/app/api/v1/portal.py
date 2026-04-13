@@ -32,6 +32,8 @@ import secrets
 import uuid
 from datetime import datetime, UTC
 
+import boto3
+
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -44,6 +46,7 @@ from app.config import get_settings
 from app.models.book import Book
 from app.models.portal import (
     AiSuggestion,
+    ArcRequest,
     BookEditorialLayer,
     BookMetadataVersion,
     FeedSource,
@@ -994,3 +997,355 @@ async def get_quality_summary(
 
     source = await _require_feed_source(db, current_user)
     return await get_quality_summary(db, source.id)
+
+
+# ── ARC endpoints (publisher side) ────────────────────────────────────────────
+
+from app.schemas.arc import ArcDecision, ArcRequestOut, ArcRequestList, ArcUploadUrlOut, ArcUploadConfirm
+from app.services import arc_service
+from app.services.email_service import send_arc_approved, send_arc_declined
+
+
+@router.get("/books/{isbn13}/arc/upload-url", response_model=ArcUploadUrlOut)
+async def get_arc_upload_url(
+    isbn13: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_publisher),
+) -> ArcUploadUrlOut:
+    """Generate a presigned S3 PUT URL for uploading an ARC PDF for a title."""
+    source = await _require_feed_source(db, current_user)
+    book = (await db.execute(select(Book).where(Book.isbn13 == isbn13))).scalar_one_or_none()
+    if book is None:
+        raise HTTPException(status_code=404, detail="Book not found")
+
+    upload_url, s3_key = arc_service.generate_arc_upload_url(isbn13)
+    return ArcUploadUrlOut(upload_url=upload_url, s3_key=s3_key, expires_in=3600)
+
+
+@router.post("/books/{isbn13}/arc", status_code=204, response_model=None)
+async def confirm_arc_upload(
+    isbn13: str,
+    payload: ArcUploadConfirm,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_publisher),
+) -> None:
+    """
+    Confirm that an ARC file has been uploaded. Enables ARC requests for the title.
+    Call this after the presigned PUT completes.
+    """
+    source = await _require_feed_source(db, current_user)
+    book = (await db.execute(select(Book).where(Book.isbn13 == isbn13))).scalar_one_or_none()
+    if book is None:
+        raise HTTPException(status_code=404, detail="Book not found")
+
+    book.arc_s3_key = payload.s3_key
+    book.arc_enabled = True
+    await db.commit()
+
+
+@router.delete("/books/{isbn13}/arc", status_code=204, response_model=None)
+async def delete_arc(
+    isbn13: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_publisher),
+) -> None:
+    """Remove the ARC file and disable ARC requests for a title."""
+    source = await _require_feed_source(db, current_user)
+    book = (await db.execute(select(Book).where(Book.isbn13 == isbn13))).scalar_one_or_none()
+    if book is None:
+        raise HTTPException(status_code=404, detail="Book not found")
+
+    arc_service.delete_arc_from_s3(isbn13)
+    book.arc_s3_key = None
+    book.arc_enabled = False
+    await db.commit()
+
+
+@router.get("/arcs", response_model=ArcRequestList)
+async def list_arc_requests(
+    status: str | None = Query(None, regex="^(pending|approved|declined)$"),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_publisher),
+) -> ArcRequestList:
+    """List all ARC requests across the publisher's titles."""
+    source = await _require_feed_source(db, current_user)
+    requests, total, pending_count = await arc_service.list_arc_requests(
+        db, source.id, status=status, limit=limit, offset=offset
+    )
+
+    # Enrich with isbn13 + title
+    items = []
+    for r in requests:
+        book = (await db.execute(select(Book).where(Book.id == r.book_id))).scalar_one_or_none()
+        items.append(ArcRequestOut(
+            id=r.id,
+            book_id=r.book_id,
+            isbn13=book.isbn13 if book else "",
+            title=book.title if book else "",
+            requester_type=r.requester_type,
+            requester_name=r.requester_name,
+            requester_email=r.requester_email,
+            requester_company=r.requester_company,
+            requester_message=r.requester_message,
+            status=r.status,
+            decline_reason=r.decline_reason,
+            approved_expires_at=r.approved_expires_at,
+            reviewed_at=r.reviewed_at,
+            created_at=r.created_at,
+        ))
+
+    return ArcRequestList(items=items, total=total, pending_count=pending_count)
+
+
+@router.patch("/arcs/{request_id}", response_model=ArcRequestOut)
+async def decide_arc_request(
+    request_id: uuid.UUID,
+    decision: ArcDecision,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_publisher),
+) -> ArcRequestOut:
+    """
+    Approve or decline an ARC request.
+    Declining requires a non-empty reason — this is sent to the requester verbatim.
+    """
+    source = await _require_feed_source(db, current_user)
+
+    arc = (await db.execute(
+        select(ArcRequest).where(
+            ArcRequest.id == request_id,
+            ArcRequest.feed_source_id == source.id,
+        )
+    )).scalar_one_or_none()
+    if arc is None:
+        raise HTTPException(status_code=404, detail="ARC request not found")
+
+    try:
+        arc = await arc_service.decide_arc_request(db, arc, decision, current_user.sub)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    book = (await db.execute(select(Book).where(Book.id == arc.book_id))).scalar_one_or_none()
+    await db.commit()
+
+    # Send email notification in background
+    import asyncio
+    publisher_name = source.name
+    book_title = book.title if book else "your title"
+
+    if decision.action == "approve" and book and book.arc_s3_key:
+        try:
+            download_url = arc_service.generate_arc_download_url(book.arc_s3_key)
+            asyncio.create_task(send_arc_approved(
+                requester_email=arc.requester_email,
+                requester_name=arc.requester_name,
+                book_title=book_title,
+                publisher_name=publisher_name,
+                download_url=download_url,
+            ))
+        except Exception:
+            logger.warning("Failed to generate ARC download URL for %s", request_id)
+    elif decision.action == "decline":
+        asyncio.create_task(send_arc_declined(
+            requester_email=arc.requester_email,
+            requester_name=arc.requester_name,
+            book_title=book_title,
+            publisher_name=publisher_name,
+            decline_reason=arc.decline_reason or "",
+        ))
+
+    return ArcRequestOut(
+        id=arc.id,
+        book_id=arc.book_id,
+        isbn13=book.isbn13 if book else "",
+        title=book_title,
+        requester_type=arc.requester_type,
+        requester_name=arc.requester_name,
+        requester_email=arc.requester_email,
+        requester_company=arc.requester_company,
+        requester_message=arc.requester_message,
+        status=arc.status,
+        decline_reason=arc.decline_reason,
+        approved_expires_at=arc.approved_expires_at,
+        reviewed_at=arc.reviewed_at,
+        created_at=arc.created_at,
+    )
+
+
+# ── Marketing Asset Hub ────────────────────────────────────────────────────────
+
+from app.models.portal import PublisherAsset
+
+ALLOWED_ASSET_TYPES = {"press_kit", "author_photo", "sell_sheet", "media_pack", "other"}
+ALLOWED_CONTENT_TYPES = {
+    "application/pdf",
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "application/zip",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+}
+
+
+@router.get("/books/{isbn13}/assets/upload-url")
+async def get_asset_upload_url(
+    isbn13: str,
+    asset_type: str = Query(...),
+    content_type: str = Query(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_publisher),
+) -> dict:
+    """Generate a presigned S3 PUT URL for uploading a marketing asset."""
+    if asset_type not in ALLOWED_ASSET_TYPES:
+        raise HTTPException(status_code=422, detail=f"asset_type must be one of {sorted(ALLOWED_ASSET_TYPES)}")
+    if content_type not in ALLOWED_CONTENT_TYPES:
+        raise HTTPException(status_code=422, detail="Unsupported content type")
+
+    source = await _require_feed_source(db, current_user)
+    book = (await db.execute(select(Book).where(Book.isbn13 == isbn13))).scalar_one_or_none()
+    if book is None:
+        raise HTTPException(status_code=404, detail="Book not found")
+
+    settings = get_settings()
+    s3_key = f"assets/{isbn13}/{asset_type}/{uuid.uuid4().hex[:8]}"
+    s3 = boto3.client("s3", region_name=settings.aws_region)
+    upload_url = s3.generate_presigned_url(
+        "put_object",
+        Params={"Bucket": settings.assets_bucket_name, "Key": s3_key, "ContentType": content_type},
+        ExpiresIn=3600,
+    )
+    return {"upload_url": upload_url, "s3_key": s3_key, "expires_in": 3600}
+
+
+@router.post("/books/{isbn13}/assets", status_code=201)
+async def create_asset(
+    isbn13: str,
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_publisher),
+) -> dict:
+    """Confirm an asset upload and create the DB record."""
+    source = await _require_feed_source(db, current_user)
+    book = (await db.execute(select(Book).where(Book.isbn13 == isbn13))).scalar_one_or_none()
+    if book is None:
+        raise HTTPException(status_code=404, detail="Book not found")
+
+    asset = PublisherAsset(
+        id=uuid.uuid4(),
+        book_id=book.id,
+        feed_source_id=source.id,
+        asset_type=payload.get("asset_type", "other"),
+        label=payload.get("label", payload.get("original_filename", "Asset")),
+        s3_key=payload["s3_key"],
+        original_filename=payload.get("original_filename"),
+        file_size_bytes=payload.get("file_size_bytes"),
+        content_type=payload.get("content_type"),
+        public=payload.get("public", True),
+    )
+    db.add(asset)
+    await db.commit()
+    await db.refresh(asset)
+    return {"id": str(asset.id), "label": asset.label, "asset_type": asset.asset_type}
+
+
+@router.get("/books/{isbn13}/assets")
+async def list_book_assets(
+    isbn13: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_publisher),
+) -> list[dict]:
+    """List all marketing assets for a title (publisher view — all assets including private)."""
+    source = await _require_feed_source(db, current_user)
+    book = (await db.execute(select(Book).where(Book.isbn13 == isbn13))).scalar_one_or_none()
+    if book is None:
+        raise HTTPException(status_code=404, detail="Book not found")
+
+    assets = (await db.scalars(
+        select(PublisherAsset).where(
+            PublisherAsset.book_id == book.id,
+            PublisherAsset.feed_source_id == source.id,
+        ).order_by(PublisherAsset.created_at.desc())
+    )).all()
+
+    settings = get_settings()
+    s3 = boto3.client("s3", region_name=settings.aws_region)
+    result = []
+    for a in assets:
+        try:
+            download_url = s3.generate_presigned_url(
+                "get_object",
+                Params={"Bucket": settings.assets_bucket_name, "Key": a.s3_key},
+                ExpiresIn=3600,
+            )
+        except Exception:
+            download_url = None
+        result.append({
+            "id": str(a.id),
+            "asset_type": a.asset_type,
+            "label": a.label,
+            "original_filename": a.original_filename,
+            "file_size_bytes": a.file_size_bytes,
+            "content_type": a.content_type,
+            "public": a.public,
+            "created_at": a.created_at.isoformat(),
+            "download_url": download_url,
+        })
+    return result
+
+
+@router.patch("/books/{isbn13}/assets/{asset_id}", status_code=204, response_model=None)
+async def update_asset(
+    isbn13: str,
+    asset_id: uuid.UUID,
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_publisher),
+) -> None:
+    """Update asset label or visibility."""
+    source = await _require_feed_source(db, current_user)
+    asset = (await db.execute(
+        select(PublisherAsset).where(
+            PublisherAsset.id == asset_id,
+            PublisherAsset.feed_source_id == source.id,
+        )
+    )).scalar_one_or_none()
+    if asset is None:
+        raise HTTPException(status_code=404, detail="Asset not found")
+
+    if "label" in payload:
+        asset.label = payload["label"]
+    if "public" in payload:
+        asset.public = bool(payload["public"])
+    await db.commit()
+
+
+@router.delete("/books/{isbn13}/assets/{asset_id}", status_code=204, response_model=None)
+async def delete_asset(
+    isbn13: str,
+    asset_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_publisher),
+) -> None:
+    """Delete a marketing asset (removes S3 object and DB record)."""
+    source = await _require_feed_source(db, current_user)
+    asset = (await db.execute(
+        select(PublisherAsset).where(
+            PublisherAsset.id == asset_id,
+            PublisherAsset.feed_source_id == source.id,
+        )
+    )).scalar_one_or_none()
+    if asset is None:
+        raise HTTPException(status_code=404, detail="Asset not found")
+
+    settings = get_settings()
+    try:
+        boto3.client("s3", region_name=settings.aws_region).delete_object(
+            Bucket=settings.assets_bucket_name, Key=asset.s3_key
+        )
+    except Exception:
+        pass
+
+    await db.delete(asset)
+    await db.commit()
