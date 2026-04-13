@@ -4,6 +4,7 @@ const nextConfig = {
     remotePatterns: [
       // Seed catalog placeholder covers
       { protocol: 'https', hostname: 'covers.seed.dev' },
+      { protocol: 'https', hostname: 'cdn.testpublisher.com' },
       // Real cover image CDNs (add more as needed)
       { protocol: 'https', hostname: '*.amazonaws.com' },
       { protocol: 'https', hostname: 'covers.openlibrary.org' },

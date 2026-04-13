@@ -12,6 +12,7 @@ Retailer endpoint (require_retailer):
 Publisher endpoint (require_publisher):
   GET /analytics/publisher/me — views, orders, trends, top titles, genre breakdown, world map data
 """
+import asyncio
 import logging
 from datetime import datetime, UTC, timedelta
 
@@ -370,216 +371,206 @@ async def publisher_analytics(
 
     Admins see platform-wide data. Publishers see data for their own titles
     (matched via FeedSource.cognito_sub).
+
+    Performance: book IDs resolved once, then all 6 analytical queries run
+    in parallel via asyncio.gather — 3 order-related summaries are merged
+    into a single query to avoid repeated joins.
     """
     since = _days_ago(days)
 
-    # ── Scope: which books does this publisher own? ────────────────────────────
+    # ── Step 1: resolve book IDs once (single query) ───────────────────────────
     if current_user.is_admin:
-        # Admin sees all books
-        book_ids_subq = select(Book.id).scalar_subquery()
+        book_ids: list = (await db.scalars(select(Book.id))).all()
     else:
-        # Publisher: find their feed source, then books from those feeds
-        feed_source = (
-            await db.execute(
-                select(FeedSource.id).where(FeedSource.cognito_sub == current_user.sub)
-            )
-        ).scalar_one_or_none()
+        feed_source = (await db.execute(
+            select(FeedSource.id).where(FeedSource.cognito_sub == current_user.sub)
+        )).scalar_one_or_none()
 
         if not feed_source:
             return _empty_publisher_response(days)
 
-        # Scope to books ingested from this publisher's feeds via BookDistributor
-        book_ids_subq = (
+        book_ids = (await db.scalars(
             select(BookDistributor.book_id)
             .where(BookDistributor.feed_source_id == feed_source)
-            .scalar_subquery()
-        )
+        )).all()
 
-    # ── Summary counts ─────────────────────────────────────────────────────────
-    total_views_row = (await db.execute(
-        select(func.count(BookViewEvent.id))
-        .where(
-            BookViewEvent.book_id.in_(book_ids_subq),
-            BookViewEvent.is_anonymous == False,  # noqa: E712
-            BookViewEvent.created_at >= since,
-        )
-    )).scalar_one() or 0
+    if not book_ids:
+        return _empty_publisher_response(days)
 
-    total_orders_row = (await db.execute(
-        select(func.count(OrderLineItem.id))
-        .join(OrderLine, OrderLine.id == OrderLineItem.order_line_id)
-        .join(Order, Order.id == OrderLine.order_id)
-        .where(
-            OrderLineItem.book_id.in_(book_ids_subq),
-            OrderLineItem.status.not_in(["cancelled"]),
-            Order.submitted_at >= since,
-        )
-    )).scalar_one() or 0
+    # ── Step 2: run all analytical queries in parallel ─────────────────────────
 
-    active_retailers_row = (await db.execute(
-        select(func.count(distinct(Order.retailer_id)))
-        .join(OrderLine, OrderLine.order_id == Order.id)
-        .join(OrderLineItem, OrderLineItem.order_line_id == OrderLine.id)
-        .where(
-            OrderLineItem.book_id.in_(book_ids_subq),
-            OrderLineItem.status.not_in(["cancelled"]),
-            Order.submitted_at >= since,
-        )
-    )).scalar_one() or 0
+    async def q_views():
+        return (await db.execute(
+            select(func.count(BookViewEvent.id))
+            .where(
+                BookViewEvent.book_id.in_(book_ids),
+                BookViewEvent.is_anonymous == False,  # noqa: E712
+                BookViewEvent.created_at >= since,
+            )
+        )).scalar_one() or 0
 
-    engagement_rate = (
-        round(total_orders_row / total_views_row * 100, 1) if total_views_row else 0.0
+    async def q_order_summary():
+        """Total orders, active retailers, and order value in one pass."""
+        row = (await db.execute(
+            select(
+                func.count(OrderLineItem.id).label("total_orders"),
+                func.count(distinct(Order.retailer_id)).label("active_retailers"),
+                func.coalesce(
+                    func.sum(OrderLineItem.trade_price_gbp * OrderLineItem.quantity_ordered), 0
+                ).label("order_value"),
+            )
+            .join(OrderLine, OrderLine.id == OrderLineItem.order_line_id)
+            .join(Order, Order.id == OrderLine.order_id)
+            .where(
+                OrderLineItem.book_id.in_(book_ids),
+                OrderLineItem.status.not_in(["cancelled"]),
+                Order.submitted_at >= since,
+            )
+        )).one()
+        return row.total_orders or 0, row.active_retailers or 0, float(row.order_value or 0)
+
+    async def q_daily_views():
+        return (await db.execute(
+            select(
+                func.date_trunc("day", BookViewEvent.created_at).label("day"),
+                func.count(BookViewEvent.id).label("views"),
+            )
+            .where(
+                BookViewEvent.book_id.in_(book_ids),
+                BookViewEvent.is_anonymous == False,  # noqa: E712
+                BookViewEvent.created_at >= since,
+            )
+            .group_by(text("day"))
+            .order_by(text("day"))
+        )).all()
+
+    async def q_daily_orders():
+        return (await db.execute(
+            select(
+                func.date_trunc("day", Order.submitted_at).label("day"),
+                func.count(OrderLineItem.id).label("orders"),
+            )
+            .join(OrderLine, OrderLine.order_id == Order.id)
+            .join(OrderLineItem, OrderLineItem.order_line_id == OrderLine.id)
+            .where(
+                OrderLineItem.book_id.in_(book_ids),
+                OrderLineItem.status.not_in(["cancelled"]),
+                Order.submitted_at >= since,
+            )
+            .group_by(text("day"))
+            .order_by(text("day"))
+        )).all()
+
+    async def q_top_titles():
+        return (await db.execute(
+            select(
+                Book.isbn13,
+                Book.title,
+                func.count(BookViewEvent.id).label("views"),
+                func.count(distinct(BookViewEvent.retailer_id)).label("unique_retailers"),
+            )
+            .join(BookViewEvent, BookViewEvent.book_id == Book.id)
+            .where(
+                Book.id.in_(book_ids),
+                BookViewEvent.is_anonymous == False,  # noqa: E712
+                BookViewEvent.created_at >= since,
+            )
+            .group_by(Book.isbn13, Book.title)
+            .order_by(func.count(BookViewEvent.id).desc())
+            .limit(10)
+        )).all()
+
+    async def q_genre():
+        return (await db.execute(
+            select(
+                BookSubject.subject_heading,
+                func.count(distinct(BookViewEvent.book_id)).label("title_count"),
+                func.count(BookViewEvent.id).label("views"),
+            )
+            .join(Book, Book.id == BookSubject.book_id)
+            .join(BookViewEvent, BookViewEvent.book_id == Book.id)
+            .where(
+                Book.id.in_(book_ids),
+                BookSubject.scheme_id.in_(["12", "10", "93"]),
+                BookSubject.subject_heading.isnot(None),
+                BookViewEvent.is_anonymous == False,  # noqa: E712
+                BookViewEvent.created_at >= since,
+            )
+            .group_by(BookSubject.subject_heading)
+            .order_by(func.count(BookViewEvent.id).desc())
+            .limit(12)
+        )).all()
+
+    async def q_countries():
+        return (await db.execute(
+            select(
+                Retailer.country_code,
+                func.count(distinct(Order.id)).label("order_count"),
+                func.count(distinct(Order.retailer_id)).label("retailer_count"),
+            )
+            .join(Order, Order.retailer_id == Retailer.id)
+            .join(OrderLine, OrderLine.order_id == Order.id)
+            .join(OrderLineItem, OrderLineItem.order_line_id == OrderLine.id)
+            .where(
+                OrderLineItem.book_id.in_(book_ids),
+                OrderLineItem.status.not_in(["cancelled"]),
+                Order.submitted_at >= since,
+                Retailer.country_code.isnot(None),
+            )
+            .group_by(Retailer.country_code)
+            .order_by(func.count(distinct(Order.id)).desc())
+        )).all()
+
+    (
+        total_views,
+        (total_orders, active_retailers, total_order_value),
+        daily_views_rows,
+        daily_orders_rows,
+        top_titles_rows,
+        genre_rows,
+        country_rows,
+    ) = await asyncio.gather(
+        q_views(),
+        q_order_summary(),
+        q_daily_views(),
+        q_daily_orders(),
+        q_top_titles(),
+        q_genre(),
+        q_countries(),
     )
 
-    # ── Order value ────────────────────────────────────────────────────────────
-    total_order_value_row = (await db.execute(
-        select(func.coalesce(
-            func.sum(OrderLineItem.trade_price_gbp * OrderLineItem.quantity_ordered), 0
-        ))
-        .join(OrderLine, OrderLine.id == OrderLineItem.order_line_id)
-        .join(Order, Order.id == OrderLine.order_id)
-        .where(
-            OrderLineItem.book_id.in_(book_ids_subq),
-            OrderLineItem.status.not_in(["cancelled"]),
-            Order.submitted_at >= since,
-        )
-    )).scalar_one() or 0
+    # ── Step 3: assemble response ──────────────────────────────────────────────
+    engagement_rate = round(total_orders / total_views * 100, 1) if total_views else 0.0
 
-    # ── Daily trend (views + orders per day) ───────────────────────────────────
-    daily_views = await db.execute(
-        select(
-            func.date_trunc("day", BookViewEvent.created_at).label("day"),
-            func.count(BookViewEvent.id).label("views"),
-        )
-        .where(
-            BookViewEvent.book_id.in_(book_ids_subq),
-            BookViewEvent.is_anonymous == False,  # noqa: E712
-            BookViewEvent.created_at >= since,
-        )
-        .group_by(text("day"))
-        .order_by(text("day"))
-    )
-
-    daily_orders = await db.execute(
-        select(
-            func.date_trunc("day", Order.submitted_at).label("day"),
-            func.count(OrderLineItem.id).label("orders"),
-        )
-        .join(OrderLine, OrderLine.order_id == Order.id)
-        .join(OrderLineItem, OrderLineItem.order_line_id == OrderLine.id)
-        .where(
-            OrderLineItem.book_id.in_(book_ids_subq),
-            OrderLineItem.status.not_in(["cancelled"]),
-            Order.submitted_at >= since,
-        )
-        .group_by(text("day"))
-        .order_by(text("day"))
-    )
-
-    # Merge views + orders into a single daily series
-    views_by_day = {r.day.date().isoformat(): r.views for r in daily_views.all()}
-    orders_by_day = {r.day.date().isoformat(): r.orders for r in daily_orders.all()}
+    views_by_day = {r.day.date().isoformat(): r.views for r in daily_views_rows}
+    orders_by_day = {r.day.date().isoformat(): r.orders for r in daily_orders_rows}
     all_days = sorted(set(views_by_day) | set(orders_by_day))
     daily_trend = [
-        {
-            "date": d,
-            "views": views_by_day.get(d, 0),
-            "orders": orders_by_day.get(d, 0),
-        }
+        {"date": d, "views": views_by_day.get(d, 0), "orders": orders_by_day.get(d, 0)}
         for d in all_days
     ]
-
-    # ── Top titles by views ────────────────────────────────────────────────────
-    top_titles = await db.execute(
-        select(
-            Book.isbn13,
-            Book.title,
-            func.count(BookViewEvent.id).label("views"),
-            func.count(distinct(BookViewEvent.retailer_id)).label("unique_retailers"),
-        )
-        .join(BookViewEvent, BookViewEvent.book_id == Book.id)
-        .where(
-            Book.id.in_(book_ids_subq),
-            BookViewEvent.is_anonymous == False,  # noqa: E712
-            BookViewEvent.created_at >= since,
-        )
-        .group_by(Book.isbn13, Book.title)
-        .order_by(func.count(BookViewEvent.id).desc())
-        .limit(10)
-    )
-
-    # ── Genre / subject breakdown ──────────────────────────────────────────────
-    genre_rows = await db.execute(
-        select(
-            BookSubject.subject_heading,
-            func.count(distinct(BookViewEvent.book_id)).label("title_count"),
-            func.count(BookViewEvent.id).label("views"),
-        )
-        .join(Book, Book.id == BookSubject.book_id)
-        .join(BookViewEvent, BookViewEvent.book_id == Book.id)
-        .where(
-            Book.id.in_(book_ids_subq),
-            BookSubject.scheme_id.in_(["12", "10", "93"]),  # BIC, BISAC, Thema
-            BookSubject.subject_heading.isnot(None),
-            BookViewEvent.is_anonymous == False,  # noqa: E712
-            BookViewEvent.created_at >= since,
-        )
-        .group_by(BookSubject.subject_heading)
-        .order_by(func.count(BookViewEvent.id).desc())
-        .limit(12)
-    )
-
-    # ── Retailer world map data ────────────────────────────────────────────────
-    # Country codes from retailers who placed orders on this publisher's titles
-    country_rows = await db.execute(
-        select(
-            Retailer.country_code,
-            func.count(distinct(Order.id)).label("order_count"),
-            func.count(distinct(Order.retailer_id)).label("retailer_count"),
-        )
-        .join(Order, Order.retailer_id == Retailer.id)
-        .join(OrderLine, OrderLine.order_id == Order.id)
-        .join(OrderLineItem, OrderLineItem.order_line_id == OrderLine.id)
-        .where(
-            OrderLineItem.book_id.in_(book_ids_subq),
-            OrderLineItem.status.not_in(["cancelled"]),
-            Order.submitted_at >= since,
-            Retailer.country_code.isnot(None),
-        )
-        .group_by(Retailer.country_code)
-        .order_by(func.count(distinct(Order.id)).desc())
-    )
 
     return {
         "period_days": days,
         "summary": {
-            "total_views": total_views_row,
-            "total_orders": total_orders_row,
-            "active_retailers": active_retailers_row,
+            "total_views": total_views,
+            "total_orders": total_orders,
+            "active_retailers": active_retailers,
             "engagement_rate": engagement_rate,
-            "total_order_value_gbp": float(total_order_value_row),
+            "total_order_value_gbp": total_order_value,
         },
         "daily_trend": daily_trend,
         "top_titles": [
-            {
-                "isbn13": r.isbn13,
-                "title": r.title,
-                "views": r.views,
-                "unique_retailers": r.unique_retailers,
-            }
-            for r in top_titles.all()
+            {"isbn13": r.isbn13, "title": r.title, "views": r.views, "unique_retailers": r.unique_retailers}
+            for r in top_titles_rows
         ],
         "genre_breakdown": [
             {"genre": r.subject_heading, "title_count": r.title_count, "views": r.views}
-            for r in genre_rows.all()
+            for r in genre_rows
         ],
         "retailer_countries": [
-            {
-                "country_code": r.country_code,
-                "order_count": r.order_count,
-                "retailer_count": r.retailer_count,
-            }
-            for r in country_rows.all()
+            {"country_code": r.country_code, "order_count": r.order_count, "retailer_count": r.retailer_count}
+            for r in country_rows
         ],
     }
 

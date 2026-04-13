@@ -459,7 +459,7 @@ async def send_arc_request_to_publisher(
 
     await _send(
         to_address=publisher_email,
-        subject=f"New ARC request for "{book_title}" — Metabookly",
+        subject=f'New ARC request for "{book_title}" — Metabookly',
         html_body=_wrap_html("New ARC Request", body),
     )
 
@@ -497,7 +497,7 @@ async def send_arc_approved(
 
     await _send(
         to_address=requester_email,
-        subject=f"Your ARC of "{book_title}" is ready to download — Metabookly",
+        subject=f'Your ARC of "{book_title}" is ready to download — Metabookly',
         html_body=_wrap_html("ARC Request Approved", body),
     )
 
@@ -528,6 +528,6 @@ async def send_arc_declined(
 
     await _send(
         to_address=requester_email,
-        subject=f"Update on your ARC request for "{book_title}" — Metabookly",
+        subject=f'Update on your ARC request for "{book_title}" — Metabookly',
         html_body=_wrap_html("ARC Request Update", body),
     )
